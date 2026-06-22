@@ -148,8 +148,7 @@ export default function AdminDashboard() {
   const [officeRadius, setOfficeRadius] = useState('4000')
   const [savingGeo, setSavingGeo] = useState(false)
   const [loadingGeo, setLoadingGeo] = useState(true)
-  const [showGeoSettings, setShowGeoSettings] = useState(false)
-
+  const [activeTab, setActiveTab] = useState('dashboard')
   const router = useRouter()
   const supabase = createClient()
   const channelRef = useRef(null)
@@ -316,7 +315,7 @@ export default function AdminDashboard() {
     return () => { mounted = false }
   }, [])
 
-  // Realtime subscription
+  // Realtime subscription — refresh all data on any change
   useEffect(() => {
     if (!profile) return
 
@@ -324,19 +323,8 @@ export default function AdminDashboard() {
       .channel('admin-attendance')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'attendance', filter: `date=eq.${today}` },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            setAttendanceList((prev) => {
-              const exists = prev.some((a) => a.id === payload.new.id)
-              return exists ? prev : [payload.new, ...prev]
-            })
-          } else if (payload.eventType === 'UPDATE') {
-            setAttendanceList((prev) => prev.map((a) => (a.id === payload.new.id ? payload.new : a)))
-          } else if (payload.eventType === 'DELETE') {
-            setAttendanceList((prev) => prev.filter((a) => a.id !== payload.old.id))
-          }
-        }
+        { event: '*', schema: 'public', table: 'attendance' },
+        () => { loadData() }
       )
       .subscribe()
 
@@ -476,214 +464,255 @@ export default function AdminDashboard() {
     <div style={s.wrapper}>
       <Toast type={toast.type} message={toast.message} onClose={closeToast} />
 
-      <div style={s.container}>
-        {/* Header */}
-        <header style={s.header}>
-          <div>
-            <h1 style={s.greeting}>{profile?.full_name}</h1>
-            <p style={s.role}>مدير</p>
+      <div style={{ display: 'flex', flexDirection: 'row-reverse', minHeight: '100vh' }}>
+        {/* Sidebar */}
+        <div style={s.sidebar}>
+          <div style={s.sidebarHeader}>
+            <div style={s.sidebarTitle}>نظام الحضور</div>
+            <div style={s.sidebarSubtitle}>{profile?.full_name} — مدير</div>
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <a href="/kiosk" target="_blank" rel="noopener noreferrer" style={s.kioskLink}>
+          <div style={s.sidebarNav}>
+            <button
+              style={{ ...s.navItem, ...(activeTab === 'dashboard' ? s.navItemActive : {}) }}
+              onClick={() => setActiveTab('dashboard')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+              </svg>
+              لوحة التحكم
+            </button>
+            <button
+              style={{ ...s.navItem, ...(activeTab === 'employees' ? s.navItemActive : {}) }}
+              onClick={() => setActiveTab('employees')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+              الموظفين
+            </button>
+            <button
+              style={{ ...s.navItem, ...(activeTab === 'settings' ? s.navItemActive : {}) }}
+              onClick={() => setActiveTab('settings')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+              الإعدادات
+            </button>
+          </div>
+          <div style={s.sidebarBottom}>
+            <a href="/kiosk" target="_blank" rel="noopener noreferrer" style={s.sidebarAction}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="3" width="20" height="14" rx="2" ry="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
               </svg>
-              شاشة الباركود للمكتب
+              شاشة الباركود
             </a>
-            <button style={s.signOut} onClick={handleSignOut}>تسجيل الخروج</button>
-          </div>
-        </header>
-
-        {/* Stats */}
-        <div style={s.statsGrid}>
-          <div style={s.statCard}>
-            <div style={s.statIcon}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            <button style={s.sidebarAction} onClick={handleSignOut}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
               </svg>
-            </div>
-            <p style={s.statLabel}>إجمالي الموظفين</p>
-            <p style={s.statValue} dir="ltr">{stats.totalEmployees}</p>
-          </div>
-          <div style={s.statCard}>
-            <div style={{ ...s.statIcon, background: 'rgba(52,199,89,0.1)' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34c759" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
-              </svg>
-            </div>
-            <p style={s.statLabel}>الحضور اليوم</p>
-            <p style={s.statValue} dir="ltr">{stats.presentToday}</p>
-          </div>
-          <div style={s.statCard}>
-            <div style={{ ...s.statIcon, background: 'rgba(255,204,0,0.1)' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#cc9a00" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-              </svg>
-            </div>
-            <p style={s.statLabel}>الإضافي هذا الشهر</p>
-            <p style={s.statValue} dir="ltr">{stats.overtimeThisMonth > 0 ? iqd(stats.overtimeThisMonth) : '0 د.ع'}</p>
-          </div>
-          <div style={s.statCard}>
-            <div style={{ ...s.statIcon, background: 'rgba(255,69,58,0.1)' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff453a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </div>
-            <p style={s.statLabel}>الخصومات هذا الشهر</p>
-            <p style={s.statValue} dir="ltr">{stats.penaltiesThisMonth > 0 ? iqd(stats.penaltiesThisMonth) : '0 د.ع'}</p>
-          </div>
-        </div>
-
-        {/* Office Location Settings — collapsible */}
-        <div style={{ ...s.section, padding: showGeoSettings ? undefined : '14px 20px', transition: 'padding 0.2s' }}>
-          <div
-            onClick={() => setShowGeoSettings((v) => !v)}
-            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', userSelect: 'none' }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" />
-              </svg>
-              <span style={{ fontSize: 14, fontWeight: 600, color: '#1d1d1f' }}>⚙️ إعدادات الموقع</span>
-            </div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aeaeb2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-              style={{ transform: showGeoSettings ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </div>
-          {showGeoSettings && (
-            <>
-              {loadingGeo ? (
-                <div style={{ ...s.emptyState, paddingTop: 24 }}><p>جاري تحميل الإعدادات...</p></div>
-              ) : (
-                <div style={{ marginTop: 20 }}>
-                  <div style={s.geoForm}>
-                    <div style={s.inputGroup}>
-                      <label style={s.label}>خط العرض (Latitude)</label>
-                      <input type="number" value={officeLat} onChange={(e) => setOfficeLat(e.target.value)}
-                        style={s.input} step="any" dir="ltr" />
-                    </div>
-                    <div style={s.inputGroup}>
-                      <label style={s.label}>خط الطول (Longitude)</label>
-                      <input type="number" value={officeLng} onChange={(e) => setOfficeLng(e.target.value)}
-                        style={s.input} step="any" dir="ltr" />
-                    </div>
-                    <div style={s.inputGroup}>
-                      <label style={s.label}>المدى الجغرافي المسموح به (متر)</label>
-                      <input type="number" value={officeRadius} onChange={(e) => setOfficeRadius(e.target.value)}
-                        style={s.input} min="1" step="1" dir="ltr" />
-                    </div>
-                  </div>
-                  <button style={{ ...s.saveBtn, marginTop: 20 }} onClick={handleSaveGeo} disabled={savingGeo}>
-                    {savingGeo ? 'جاري الحفظ...' : 'حفظ الإعدادات الجغرافية'}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Employees Table */}
-        <div style={s.section}>
-          <div style={s.sectionHeader}>
-            <h2 style={s.sectionTitle}>الموظفين</h2>
-            <button style={s.addBtn} onClick={() => setShowAddModal(true)}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              إضافة موظف جديد
+              تسجيل الخروج
             </button>
           </div>
-          {employees.length === 0 ? (
-            <div style={s.emptyState}><p>لم يتم العثور على موظفين.</p></div>
-          ) : (
-            <div style={s.tableResponsive}>
-              <div style={s.table}>
-                <div style={s.tableHeader}>
-                  <span style={s.th}>الاسم</span>
-                  <span style={s.th}>الراتب الشهري</span>
-                  <span style={s.th}>الساعات</span>
-                  <span style={{ ...s.th, textAlign: 'center' }}>الإجراءات</span>
+        </div>
+
+        {/* Main Content */}
+        <div style={s.mainContent}>
+          {activeTab === 'dashboard' && (
+            <div style={s.containerInner}>
+              <header style={s.header}>
+                <div>
+                  <h1 style={s.greeting}>لوحة التحكم</h1>
+                  <p style={s.role}>نظرة عامة على الحضور اليوم</p>
                 </div>
-                {employees.map((emp) => (
-                  <div key={emp.id} style={s.tableRow}>
-                    <span style={s.tdName}>{emp.full_name}</span>
-                    <span style={s.td} dir="ltr">{iqd(emp.monthly_salary)}</span>
-                    <span style={s.td} dir="ltr">{emp.required_hours}س</span>
-                    <span style={s.tdAction}>
-                      <button style={s.editBtn} onClick={() => openEdit(emp)}>تعديل</button>
-                      <button style={s.deleteBtn} onClick={() => setDeleteTarget(emp)}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        </svg>
-                      </button>
-                    </span>
+              </header>
+
+              <div style={s.statsGrid}>
+                <div style={s.statCard}>
+                  <div style={s.statIcon}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
                   </div>
-                ))}
+                  <p style={s.statLabel}>إجمالي الموظفين</p>
+                  <p style={s.statValue} dir="ltr">{stats.totalEmployees}</p>
+                </div>
+                <div style={s.statCard}>
+                  <div style={{ ...s.statIcon, background: 'rgba(52,199,89,0.1)' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34c759" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                  </div>
+                  <p style={s.statLabel}>الحضور اليوم</p>
+                  <p style={s.statValue} dir="ltr">{stats.presentToday}</p>
+                </div>
+                <div style={s.statCard}>
+                  <div style={{ ...s.statIcon, background: 'rgba(255,204,0,0.1)' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#cc9a00" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                    </svg>
+                  </div>
+                  <p style={s.statLabel}>الإضافي هذا الشهر</p>
+                  <p style={s.statValue} dir="ltr">{stats.overtimeThisMonth > 0 ? iqd(stats.overtimeThisMonth) : '0 د.ع'}</p>
+                </div>
+                <div style={s.statCard}>
+                  <div style={{ ...s.statIcon, background: 'rgba(255,69,58,0.1)' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff453a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </div>
+                  <p style={s.statLabel}>الخصومات هذا الشهر</p>
+                  <p style={s.statValue} dir="ltr">{stats.penaltiesThisMonth > 0 ? iqd(stats.penaltiesThisMonth) : '0 د.ع'}</p>
+                </div>
+              </div>
+
+              <div style={s.section}>
+                <div style={s.sectionHeader}>
+                  <h2 style={s.sectionTitle}>الحضور المباشر — اليوم</h2>
+                  <span style={s.liveBadge}>
+                    <span style={s.liveDot} />
+                    مباشر
+                  </span>
+                </div>
+                {orderedAttendance.length === 0 ? (
+                  <div style={s.emptyState}><p>لا توجد سجلات حضور لليوم بعد.</p></div>
+                ) : (
+                  <div style={s.tableResponsive}>
+                    <div style={s.table}>
+                      <div style={s.attHeader}>
+                        <span style={s.th}>الموظف</span>
+                        <span style={s.th}>دخول</span>
+                        <span style={s.th}>خروج</span>
+                        <span style={s.th}>ساعات</span>
+                        <span style={s.th}>إضافي (د.ع)</span>
+                        <span style={s.th}>خصم (د.ع)</span>
+                        <span style={s.th}>الحالة</span>
+                      </div>
+                      {orderedAttendance.map((a) => {
+                        const pay = getEmployeePay(a.employee_id)
+                        const penAmt = calcPenaltyAmount(a.penalty_minutes, pay.monthly_salary, pay.required_hours)
+                        const overAmt = calcOvertimeAmount(a.overtime_minutes, pay.monthly_salary, pay.required_hours)
+                        const statusColor =
+                          a.status === 'present' ? '#34c759' :
+                          a.status === 'late' ? '#cc9a00' :
+                          a.status === 'early_checkout' ? '#ff453a' : '#aeaeb2'
+                        const badgeBg =
+                          a.status === 'present' ? 'rgba(52,199,89,0.1)' :
+                          a.status === 'late' ? 'rgba(204,154,0,0.1)' :
+                          a.status === 'early_checkout' ? 'rgba(255,69,58,0.1)' :
+                          'rgba(0,0,0,0.04)'
+                        return (
+                          <div key={a.id} style={s.attRow}>
+                            <span style={s.tdName}>{profilesMap[a.employee_id] || 'غير معروف'}</span>
+                            <span style={s.td}>{new Date(a.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span style={s.td}>{a.check_out ? new Date(a.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                            <span style={s.td}>{a.total_hours ? `${a.total_hours.toFixed(1)}س` : '—'}</span>
+                            <span style={{ ...s.td, color: overAmt > 0 ? '#34c759' : '#aeaeb2' }}>
+                              {overAmt > 0 ? iqd(overAmt) : '—'}
+                            </span>
+                            <span style={{ ...s.td, color: penAmt > 0 ? '#ff453a' : '#aeaeb2' }}>
+                              {penAmt > 0 ? iqd(penAmt) : '—'}
+                            </span>
+                            <span>
+                              <span style={{ ...s.badge, background: badgeBg, color: statusColor }}>
+                                {statusDisplay(a)}
+                              </span>
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
-        </div>
 
-        {/* Live Attendance Log */}
-        <div style={s.section}>
-          <div style={s.sectionHeader}>
-            <h2 style={s.sectionTitle}>الحضور المباشر — اليوم</h2>
-            <span style={s.liveBadge}>
-              <span style={s.liveDot} />
-              مباشر
-            </span>
-          </div>
-          {orderedAttendance.length === 0 ? (
-            <div style={s.emptyState}><p>لا توجد سجلات حضور لليوم بعد.</p></div>
-          ) : (
-            <div style={s.tableResponsive}>
-              <div style={s.table}>
-                <div style={s.attHeader}>
-                  <span style={s.th}>الموظف</span>
-                  <span style={s.th}>دخول</span>
-                  <span style={s.th}>خروج</span>
-                  <span style={s.th}>ساعات</span>
-                  <span style={s.th}>إضافي (د.ع)</span>
-                  <span style={s.th}>خصم (د.ع)</span>
-                  <span style={s.th}>الحالة</span>
+          {activeTab === 'employees' && (
+            <div style={s.containerInner}>
+              <header style={s.header}>
+                <div>
+                  <h1 style={s.greeting}>الموظفين</h1>
+                  <p style={s.role}>إدارة الموظفين والرواتب</p>
                 </div>
-                  {orderedAttendance.map((a) => {
-                  const pay = getEmployeePay(a.employee_id)
-                  const penAmt = calcPenaltyAmount(a.penalty_minutes, pay.monthly_salary, pay.required_hours)
-                  const overAmt = calcOvertimeAmount(a.overtime_minutes, pay.monthly_salary, pay.required_hours)
+                <button style={s.addBtn} onClick={() => setShowAddModal(true)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  إضافة موظف جديد
+                </button>
+              </header>
 
-                  const statusColor =
-                    a.status === 'present' ? '#34c759' :
-                    a.status === 'late' ? '#cc9a00' :
-                    a.status === 'early_checkout' ? '#ff453a' : '#aeaeb2'
-
-                  const badgeBg =
-                    a.status === 'present' ? 'rgba(52,199,89,0.1)' :
-                    a.status === 'late' ? 'rgba(204,154,0,0.1)' :
-                    a.status === 'early_checkout' ? 'rgba(255,69,58,0.1)' :
-                    'rgba(0,0,0,0.04)'
-
-                  return (
-                    <div key={a.id} style={s.attRow}>
-                       <span style={s.tdName}>{profilesMap[a.employee_id] || 'غير معروف'}</span>
-                      <span style={s.td}>{new Date(a.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
-                      <span style={s.td}>{a.check_out ? new Date(a.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-                      <span style={s.td}>{a.total_hours ? `${a.total_hours.toFixed(1)}س` : '—'}</span>
-                      <span style={{ ...s.td, color: overAmt > 0 ? '#34c759' : '#aeaeb2' }}>
-                        {overAmt > 0 ? iqd(overAmt) : '—'}
-                      </span>
-                      <span style={{ ...s.td, color: penAmt > 0 ? '#ff453a' : '#aeaeb2' }}>
-                        {penAmt > 0 ? iqd(penAmt) : '—'}
-                      </span>
-                      <span>
-                        <span style={{ ...s.badge, background: badgeBg, color: statusColor }}>
-                          {statusDisplay(a)}
-                        </span>
-                      </span>
+              <div style={s.section}>
+                {employees.length === 0 ? (
+                  <div style={s.emptyState}><p>لم يتم العثور على موظفين.</p></div>
+                ) : (
+                  <div style={s.tableResponsive}>
+                    <div style={s.table}>
+                      <div style={s.tableHeader}>
+                        <span style={s.th}>الاسم</span>
+                        <span style={s.th}>الراتب الشهري</span>
+                        <span style={s.th}>الساعات</span>
+                        <span style={{ ...s.th, textAlign: 'center' }}>الإجراءات</span>
+                      </div>
+                      {employees.map((emp) => (
+                        <div key={emp.id} style={s.tableRow}>
+                          <span style={s.tdName}>{emp.full_name}</span>
+                          <span style={s.td} dir="ltr">{iqd(emp.monthly_salary)}</span>
+                          <span style={s.td} dir="ltr">{emp.required_hours}س</span>
+                          <span style={s.tdAction}>
+                            <button style={s.editBtn} onClick={() => openEdit(emp)}>تعديل</button>
+                            <button style={s.deleteBtn} onClick={() => setDeleteTarget(emp)}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                              </svg>
+                            </button>
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  )
-                })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'settings' && (
+            <div style={s.containerInner}>
+              <header style={s.header}>
+                <div>
+                  <h1 style={s.greeting}>إعدادات الموقع</h1>
+                  <p style={s.role}>تحديد موقع المكتب والمدى الجغرافي المسموح به</p>
+                </div>
+              </header>
+
+              <div style={s.section}>
+                {loadingGeo ? (
+                  <div style={s.emptyState}><p>جاري تحميل الإعدادات...</p></div>
+                ) : (
+                  <>
+                    <div style={s.geoForm}>
+                      <div style={s.inputGroup}>
+                        <label style={s.label}>خط العرض (Latitude)</label>
+                        <input type="number" value={officeLat} onChange={(e) => setOfficeLat(e.target.value)}
+                          style={s.input} step="any" dir="ltr" />
+                      </div>
+                      <div style={s.inputGroup}>
+                        <label style={s.label}>خط الطول (Longitude)</label>
+                        <input type="number" value={officeLng} onChange={(e) => setOfficeLng(e.target.value)}
+                          style={s.input} step="any" dir="ltr" />
+                      </div>
+                      <div style={s.inputGroup}>
+                        <label style={s.label}>المدى الجغرافي المسموح به (متر)</label>
+                        <input type="number" value={officeRadius} onChange={(e) => setOfficeRadius(e.target.value)}
+                          style={s.input} min="1" step="1" dir="ltr" />
+                      </div>
+                    </div>
+                    <button style={{ ...s.saveBtn, marginTop: 20, width: '100%' }} onClick={handleSaveGeo} disabled={savingGeo}>
+                      {savingGeo ? 'جاري الحفظ...' : 'حفظ الإعدادات الجغرافية'}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1258,5 +1287,96 @@ const s = {
     cursor: 'pointer',
     fontFamily: 'inherit',
     boxShadow: '0 4px 16px rgba(52,199,89,0.25)',
+  },
+  sidebar: {
+    width: 240,
+    background: 'rgba(255,255,255,0.9)',
+    backdropFilter: 'blur(24px) saturate(180%)',
+    borderLeft: '1px solid rgba(0,0,0,0.06)',
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100vh',
+    position: 'sticky',
+    top: 0,
+    flexShrink: 0,
+  },
+  sidebarHeader: {
+    padding: '28px 20px 16px',
+    borderBottom: '1px solid rgba(0,0,0,0.04)',
+  },
+  sidebarTitle: {
+    fontSize: 17,
+    fontWeight: 700,
+    color: '#1d1d1f',
+    marginBottom: 2,
+  },
+  sidebarSubtitle: {
+    fontSize: 12,
+    fontWeight: 500,
+    color: '#aeaeb2',
+  },
+  sidebarNav: {
+    flex: 1,
+    padding: '12px 10px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  navItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '12px 14px',
+    borderRadius: 10,
+    cursor: 'pointer',
+    fontSize: 13,
+    fontWeight: 500,
+    color: '#6e6e73',
+    border: 'none',
+    background: 'transparent',
+    fontFamily: 'inherit',
+    width: '100%',
+    textAlign: 'right',
+    transition: 'background 0.15s',
+  },
+  navItemActive: {
+    background: 'rgba(124,58,237,0.08)',
+    color: '#7c3aed',
+    fontWeight: 600,
+  },
+  sidebarBottom: {
+    padding: '12px 10px',
+    borderTop: '1px solid rgba(0,0,0,0.04)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+  },
+  sidebarAction: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '10px 14px',
+    borderRadius: 10,
+    fontSize: 13,
+    fontWeight: 500,
+    color: '#6e6e73',
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    textDecoration: 'none',
+    width: '100%',
+    textAlign: 'right',
+    transition: 'background 0.15s',
+  },
+  mainContent: {
+    flex: 1,
+    padding: '36px 40px',
+    overflowY: 'auto',
+    minHeight: '100vh',
+  },
+  containerInner: {
+    maxWidth: 960,
+    margin: '0 auto',
   },
 }
