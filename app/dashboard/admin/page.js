@@ -464,7 +464,7 @@ export default function AdminDashboard() {
     <div style={s.wrapper}>
       <Toast type={toast.type} message={toast.message} onClose={closeToast} />
 
-      <div style={{ display: 'flex', flexDirection: 'row-reverse', minHeight: '100vh' }}>
+      <div style={{ display: 'flex', flexDirection: 'row', minHeight: '100vh' }}>
         {/* Sidebar */}
         <div style={s.sidebar}>
           <div style={s.sidebarHeader}>
@@ -1292,7 +1292,7 @@ const s = {
     width: 240,
     background: 'rgba(255,255,255,0.9)',
     backdropFilter: 'blur(24px) saturate(180%)',
-    borderLeft: '1px solid rgba(0,0,0,0.06)',
+    borderRight: '1px solid rgba(0,0,0,0.06)',
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
