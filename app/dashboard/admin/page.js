@@ -143,6 +143,11 @@ export default function AdminDashboard() {
   const [adding, setAdding] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [officeLat, setOfficeLat] = useState('33.365481')
+  const [officeLng, setOfficeLng] = useState('44.531729')
+  const [officeRadius, setOfficeRadius] = useState('4000')
+  const [savingGeo, setSavingGeo] = useState(false)
+  const [loadingGeo, setLoadingGeo] = useState(true)
 
   const router = useRouter()
   const supabase = createClient()
@@ -151,8 +156,17 @@ export default function AdminDashboard() {
   const showToast = useCallback((type, message) => setToast({ type, message }), [])
   const closeToast = useCallback(() => setToast({ type: '', message: '' }), [])
 
-  const today = new Date().toISOString().slice(0, 10)
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)
+  const getEffectiveDate = () => {
+    const d = new Date()
+    if (d.getHours() < 4) d.setDate(d.getDate() - 1)
+    return d.toISOString().slice(0, 10)
+  }
+  const getMonthStart = () => {
+    const d = new Date(getEffectiveDate())
+    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
+  }
+  const today = getEffectiveDate()
+  const monthStart = getMonthStart()
 
   const iqd = (value) =>
     new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value) + ' د.ع'
@@ -199,8 +213,20 @@ export default function AdminDashboard() {
 
     const empList = employees || []
 
-    const overtimeAmtThisMonth = monthAttendance
-      ? monthAttendance.reduce((sum, a) => {
+    const dedupMonth = []
+    if (monthAttendance) {
+      const seen = new Set()
+      for (const a of monthAttendance) {
+        const key = a.employee_id + '|' + a.date
+        if (!seen.has(key)) {
+          seen.add(key)
+          dedupMonth.push(a)
+        }
+      }
+    }
+
+    const overtimeAmtThisMonth = dedupMonth.length
+      ? dedupMonth.reduce((sum, a) => {
           const pay = empList.find((e) => e.id === a.employee_id)
           const sal = pay?.monthly_salary || 0
           const hrs = pay?.required_hours || 8
@@ -208,8 +234,8 @@ export default function AdminDashboard() {
         }, 0)
       : 0
 
-    const penaltiesAmtThisMonth = monthAttendance
-      ? monthAttendance.reduce((sum, a) => {
+    const penaltiesAmtThisMonth = dedupMonth.length
+      ? dedupMonth.reduce((sum, a) => {
           const pay = empList.find((e) => e.id === a.employee_id)
           const sal = pay?.monthly_salary || 0
           const hrs = pay?.required_hours || 8
@@ -228,6 +254,39 @@ export default function AdminDashboard() {
     const payMap = {}
     empList.forEach((e) => { payMap[e.id] = { monthly_salary: e.monthly_salary, required_hours: e.required_hours } })
     setEmployeeSalaryMap(payMap)
+  }
+
+  async function loadOfficeSettings() {
+    const { data } = await supabase.from('office_settings').select('*').eq('id', 1).maybeSingle()
+    if (data) {
+      setOfficeLat(String(data.latitude))
+      setOfficeLng(String(data.longitude))
+      setOfficeRadius(String(data.allowed_radius_meters))
+    }
+    setLoadingGeo(false)
+  }
+
+  async function handleSaveGeo() {
+    const lat = parseFloat(officeLat)
+    const lng = parseFloat(officeLng)
+    const radius = parseInt(officeRadius, 10)
+
+    if (isNaN(lat) || isNaN(lng) || isNaN(radius) || radius < 1) {
+      showToast('error', 'يرجى إدخال قيم صالحة')
+      return
+    }
+
+    setSavingGeo(true)
+    const { error } = await supabase
+      .from('office_settings')
+      .upsert({ id: 1, latitude: lat, longitude: lng, allowed_radius_meters: radius })
+    setSavingGeo(false)
+
+    if (error) {
+      showToast('error', error.message || 'فشل الحفظ')
+    } else {
+      showToast('success', 'تم تحديث موقع المكتب والمدى المسموح بنجاح')
+    }
   }
 
   useEffect(() => {
@@ -249,7 +308,7 @@ export default function AdminDashboard() {
 
       if (!mounted) return
       setProfile(p)
-      await loadData()
+      await Promise.all([loadData(), loadOfficeSettings()])
       setLoading(false)
     }
     init()
@@ -472,6 +531,44 @@ export default function AdminDashboard() {
             <p style={s.statLabel}>الخصومات هذا الشهر</p>
             <p style={s.statValue} dir="ltr">{stats.penaltiesThisMonth > 0 ? iqd(stats.penaltiesThisMonth) : '0 د.ع'}</p>
           </div>
+        </div>
+
+        {/* Office Location Settings */}
+        <div style={s.section}>
+          <div style={s.sectionHeader}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" />
+              </svg>
+              <h2 style={s.sectionTitle}>إعدادات الموقع الجغرافي للمكتب</h2>
+            </div>
+          </div>
+          {loadingGeo ? (
+            <div style={s.emptyState}><p>جاري تحميل الإعدادات...</p></div>
+          ) : (
+            <>
+              <div style={s.geoForm}>
+                <div style={s.inputGroup}>
+                  <label style={s.label}>خط العرض (Latitude)</label>
+                  <input type="number" value={officeLat} onChange={(e) => setOfficeLat(e.target.value)}
+                    style={s.input} step="any" dir="ltr" />
+                </div>
+                <div style={s.inputGroup}>
+                  <label style={s.label}>خط الطول (Longitude)</label>
+                  <input type="number" value={officeLng} onChange={(e) => setOfficeLng(e.target.value)}
+                    style={s.input} step="any" dir="ltr" />
+                </div>
+                <div style={s.inputGroup}>
+                  <label style={s.label}>المدى الجغرافي المسموح به (متر)</label>
+                  <input type="number" value={officeRadius} onChange={(e) => setOfficeRadius(e.target.value)}
+                    style={s.input} min="1" step="1" dir="ltr" />
+                </div>
+              </div>
+              <button style={{ ...s.saveBtn, marginTop: 20 }} onClick={handleSaveGeo} disabled={savingGeo}>
+                {savingGeo ? 'جاري الحفظ...' : 'حفظ الإعدادات الجغرافية'}
+              </button>
+            </>
+          )}
         </div>
 
         {/* Employees Table */}
@@ -896,6 +993,12 @@ const s = {
     padding: '36px 0',
     color: '#aeaeb2',
     fontSize: 14,
+  },
+  geoForm: {
+    display: 'flex',
+    flexDirection: 'row',
+    gap: 16,
+    flexWrap: 'wrap',
   },
   tableResponsive: {
     overflowX: 'auto',

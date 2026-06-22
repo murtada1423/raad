@@ -69,12 +69,18 @@ export default function EmployeeDashboard() {
     setToast({ type: '', message: '' })
   }, [])
 
+  const getEffectiveDate = () => {
+    const d = new Date()
+    if (d.getHours() < 4) d.setDate(d.getDate() - 1)
+    return d.toISOString().slice(0, 10)
+  }
+
   async function loadData(userId) {
     const today = await supabase
       .from('attendance')
       .select('*')
       .eq('employee_id', userId)
-      .eq('date', new Date().toISOString().slice(0, 10))
+      .eq('date', getEffectiveDate())
       .order('check_in', { ascending: false })
       .limit(1)
 
@@ -89,7 +95,15 @@ export default function EmployeeDashboard() {
       .order('check_in', { ascending: false })
       .limit(10)
 
-    if (hist.data) setHistory(hist.data)
+    if (hist.data) {
+      const seen = new Set()
+      const deduped = hist.data.filter((r) => {
+        if (seen.has(r.date)) return false
+        seen.add(r.date)
+        return true
+      })
+      setHistory(deduped)
+    }
   }
 
   useEffect(() => {
@@ -230,28 +244,24 @@ export default function EmployeeDashboard() {
   }
 
   const dailyRate = profile ? profile.monthly_salary / 30 : 0
-  const hourlyRate = profile ? dailyRate / (profile.required_hours || 8) : 0
   const hasAttendance = !!(attendance?.check_in)
 
   let hoursWorked = 0
-  let overtimeMin = 0
-  let penaltyMin = 0
-  let baseEarned = 0
-  let overtimeEarned = 0
-  let penaltyDeduction = 0
+  let overtimeAmt = 0
+  let penaltyAmt = 0
   let netEarned = 0
   let todayStatus = 'no record'
 
   if (hasAttendance) {
     hoursWorked = attendance.total_hours || 0
-    overtimeMin = parseInt(attendance.overtime_minutes) || 0
-    penaltyMin = parseInt(attendance.penalty_minutes) || 0
-    baseEarned = (hoursWorked / (profile.required_hours || 8)) * dailyRate
-    overtimeEarned = (overtimeMin / 60) * hourlyRate * 1.5
-    penaltyDeduction = (penaltyMin / 60) * hourlyRate
-    netEarned = baseEarned + overtimeEarned - penaltyDeduction
+    overtimeAmt = parseInt(attendance.overtime_amount) || 0
+    penaltyAmt = parseInt(attendance.penalty_amount) || 0
+    netEarned = Math.max(0, dailyRate - penaltyAmt) + overtimeAmt
     todayStatus = attendance.check_out ? 'Completed' : 'Checked In'
   }
+
+  const iqd = (value) =>
+    new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value) + ' د.ع'
 
   if (loading) {
     return (
@@ -331,14 +341,14 @@ export default function EmployeeDashboard() {
           </div>
           <div style={styles.statCard}>
             <p style={styles.statLabel}>الإضافي</p>
-            <p style={{ ...styles.statValue, color: overtimeMin > 0 ? '#34c759' : '#aeaeb2' }}>
-              {hasAttendance ? <span dir="ltr">{overtimeMin}د</span> : '—'}
+            <p style={{ ...styles.statValue, color: overtimeAmt > 0 ? '#34c759' : '#aeaeb2' }}>
+              {hasAttendance ? <span dir="ltr">{iqd(overtimeAmt)}</span> : '—'}
             </p>
           </div>
           <div style={styles.statCard}>
             <p style={styles.statLabel}>الخصومات</p>
-            <p style={{ ...styles.statValue, color: penaltyMin > 0 ? '#ff453a' : '#aeaeb2' }}>
-              {hasAttendance ? <span dir="ltr">{penaltyMin}د</span> : '—'}
+            <p style={{ ...styles.statValue, color: penaltyAmt > 0 ? '#ff453a' : '#aeaeb2' }}>
+              {hasAttendance ? <span dir="ltr">{iqd(penaltyAmt)}</span> : '—'}
             </p>
           </div>
         </div>

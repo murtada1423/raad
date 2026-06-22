@@ -35,7 +35,21 @@ CREATE TABLE IF NOT EXISTS public.attendance (
     status             TEXT NOT NULL CHECK (status IN ('present', 'late', 'early_checkout'))
 );
 
--- 3. INDEXES
+-- 3. OFFICE SETTINGS TABLE (single-row config for geofencing)
+CREATE TABLE IF NOT EXISTS public.office_settings (
+    id                    INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    latitude              NUMERIC NOT NULL DEFAULT 33.365481,
+    longitude             NUMERIC NOT NULL DEFAULT 44.531729,
+    allowed_radius_meters INT NOT NULL DEFAULT 50,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO public.office_settings (id, latitude, longitude, allowed_radius_meters)
+VALUES (1, 33.365481, 44.531729, 50)
+ON CONFLICT (id) DO NOTHING;
+
+-- 4. INDEXES
 CREATE INDEX IF NOT EXISTS idx_attendance_employee_date
     ON public.attendance(employee_id, date);
 
@@ -127,19 +141,57 @@ CREATE POLICY attendance_delete_admin
 
 -- Allow the SECURITY DEFINER function to bypass RLS by creating
 -- a policy that lets authenticated users insert their own scan.
--- The function runs as the owner and is not affected by this policy,
--- but we keep it for direct inserts from the client if ever needed.
 CREATE POLICY attendance_insert_self
     ON public.attendance
     FOR INSERT
     WITH CHECK (auth.uid() = employee_id);
 
+-- 3c. OFFICE SETTINGS RLS
+ALTER TABLE public.office_settings ENABLE ROW LEVEL SECURITY;
+
+-- Admins can read / write office_settings
+CREATE POLICY office_settings_select_admin
+    ON public.office_settings
+    FOR SELECT
+    USING (auth.uid() IN (
+        SELECT id FROM public.profiles WHERE role = 'admin'
+    ));
+
+CREATE POLICY office_settings_insert_admin
+    ON public.office_settings
+    FOR INSERT
+    WITH CHECK (auth.uid() IN (
+        SELECT id FROM public.profiles WHERE role = 'admin'
+    ));
+
+CREATE POLICY office_settings_update_admin
+    ON public.office_settings
+    FOR UPDATE
+    USING (auth.uid() IN (
+        SELECT id FROM public.profiles WHERE role = 'admin'
+    ));
+
+CREATE POLICY office_settings_delete_admin
+    ON public.office_settings
+    FOR DELETE
+    USING (auth.uid() IN (
+        SELECT id FROM public.profiles WHERE role = 'admin'
+    ));
+
 -- ============================================================
 -- STORED FUNCTION: process_attendance_scan
 -- ============================================================
--- Handles multi-session check-in/check-out within a single day.
--- Uses a SINGLE row per employee per day with accumulated minutes.
--- Penalty:  based on total daily minutes worked, capped at daily_rate.
+-- Handles multi-session check-in/check-out within a single day,
+-- including late-night shifts crossing midnight (4 PM – 2 AM).
+--
+-- BUSINESS DAY OFFSET:
+--   Scans between 00:00–04:00 are attributed to the PREVIOUS
+--   calendar day so that overtime past midnight is correctly
+--   captured under the shift's original date.
+--
+-- SINGLE ROW PER EMPLOYEE PER DAY:
+--   Enforced by UNIQUE (employee_id, date) + advisory lock.
+--   Penalty capped at daily_rate. Net daily earned never negative.
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.process_attendance_scan(
@@ -154,14 +206,16 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-    -- office geofence constants
-    c_office_lat       CONSTANT NUMERIC := 33.365481;
-    c_office_lng       CONSTANT NUMERIC := 44.531729;
-    c_allowed_radius   CONSTANT NUMERIC := 4000;
+    -- earth radius constant (Haversine formula)
     c_earth_radius     CONSTANT NUMERIC := 6371000;
 
     -- work-hour constants
     c_shift_start      CONSTANT TIME := '09:00:00';
+
+    -- geofence variables (fetched dynamically from office_settings)
+    v_office_lat          NUMERIC;
+    v_office_lng          NUMERIC;
+    v_allowed_radius      NUMERIC;
 
     -- computed variables
     v_distance           NUMERIC;
@@ -179,8 +233,15 @@ DECLARE
     v_overtime_amount    NUMERIC(10, 0);
     v_check_in           TIMESTAMPTZ;
     v_check_out          TIMESTAMPTZ;
-    v_is_first_checkin   BOOLEAN;
+    v_is_new_row         BOOLEAN;
+    v_effective_date     DATE;
 BEGIN
+    -- ============================================================
+    -- 0. Advisory lock per employee serializes concurrent scans,
+    --    preventing race conditions that create duplicate rows.
+    -- ============================================================
+    PERFORM pg_advisory_xact_lock(hashtext('att_scan_' || p_user_id::text));
+
     -- ============================================================
     -- 1. Validate QR timestamp
     -- ============================================================
@@ -195,16 +256,31 @@ BEGIN
     END IF;
 
     -- ============================================================
-    -- 2. Geofencing — Haversine distance check
+    -- 2. Fetch office geofence settings dynamically
+    --    Falls back to Baghdad coordinates if no row exists.
+    -- ============================================================
+    SELECT latitude, longitude, allowed_radius_meters
+      INTO v_office_lat, v_office_lng, v_allowed_radius
+      FROM public.office_settings
+     WHERE id = 1;
+
+    IF NOT FOUND THEN
+        v_office_lat     := 33.365481;
+        v_office_lng     := 44.531729;
+        v_allowed_radius := 50;
+    END IF;
+
+    -- ============================================================
+    -- 3. Geofencing — Haversine distance check
     -- ============================================================
     v_distance := c_earth_radius * 2 * ASIN(SQRT(
-        POWER(SIN(RADIANS(p_lat - c_office_lat) / 2), 2)
-        + COS(RADIANS(c_office_lat))
+        POWER(SIN(RADIANS(p_lat - v_office_lat) / 2), 2)
+        + COS(RADIANS(v_office_lat))
         * COS(RADIANS(p_lat))
-        * POWER(SIN(RADIANS(p_lng - c_office_lng) / 2), 2)
+        * POWER(SIN(RADIANS(p_lng - v_office_lng) / 2), 2)
     ));
 
-    IF v_distance > c_allowed_radius THEN
+    IF v_distance > v_allowed_radius THEN
         RETURN jsonb_build_object(
             'success',  false,
             'error',    'Outside geofence — you must be at the office',
@@ -213,7 +289,7 @@ BEGIN
     END IF;
 
     -- ============================================================
-    -- 3. Fetch employee profile
+    -- 4. Fetch employee profile
     -- ============================================================
     SELECT id, role, required_hours, monthly_salary
       INTO v_profile
@@ -228,21 +304,35 @@ BEGIN
     END IF;
 
     -- ============================================================
-    -- 4. Find today's attendance row (if any)
+    -- 5. Compute effective business date
+    --    Scans between 00:00–04:00 attribute to the previous day,
+    --    so that late-night overtime (e.g. check-out at 1:00 AM)
+    --    is recorded under the shift's original business date.
+    -- ============================================================
+    IF NOW()::TIME < '04:00:00'::TIME THEN
+        v_effective_date := CURRENT_DATE - 1;
+    ELSE
+        v_effective_date := CURRENT_DATE;
+    END IF;
+
+    -- ============================================================
+    -- 6. Find attendance row for the effective business date
+    --    (at most ONE per employee+date thanks to UNIQUE constraint)
     -- ============================================================
     SELECT *
       INTO v_attendance
       FROM public.attendance
      WHERE employee_id = p_user_id
-       AND date = CURRENT_DATE
-     ORDER BY check_in DESC
-     LIMIT 1;
+       AND date = v_effective_date;
+
+    v_is_new_row := NOT FOUND;
 
     -- ============================================================
-    -- 5a. Row does NOT exist → FIRST CHECK-IN today
+    -- 7a. No row exists → FIRST CHECK-IN for this business day
+    --     Uses ON CONFLICT DO NOTHING as a safety net even with the
+    --     advisory lock above, in case the lock is ever bypassed.
     -- ============================================================
-    IF NOT FOUND THEN
-        v_is_first_checkin := true;
+    IF v_is_new_row THEN
         v_check_in := NOW();
 
         IF v_check_in::TIME > c_shift_start THEN
@@ -254,67 +344,67 @@ BEGIN
         INSERT INTO public.attendance
             (employee_id, check_in, date, status)
         VALUES
-            (p_user_id, v_check_in, CURRENT_DATE, v_status)
-        RETURNING id INTO v_attendance;
+            (p_user_id, v_check_in, v_effective_date, v_status)
+        ON CONFLICT (employee_id, date) DO NOTHING
+        RETURNING * INTO v_attendance;
+
+        IF v_attendance.id IS NULL THEN
+            SELECT * INTO v_attendance
+              FROM public.attendance
+             WHERE employee_id = p_user_id
+               AND date = v_effective_date;
+        END IF;
 
         RETURN jsonb_build_object(
             'success',        true,
             'action',         'check_in',
             'attendance_id',  v_attendance.id,
-            'status',         v_status,
-            'check_in',       v_check_in,
-            'session',        1
+            'status',         v_attendance.status,
+            'check_in',       v_attendance.check_in
         );
     END IF;
 
     -- ============================================================
-    -- 5b. Row exists with check_out IS NULL → CHECK-OUT
+    -- 7b. Row exists with check_out IS NULL → CHECK-OUT
+    --     Session duration is calculated from actual timestamps
+    --     (handles midnight crossing correctly via EXTRACT(EPOCH)).
+    --     Penalty/Overtime computed from total accumulated minutes.
     -- ============================================================
     IF v_attendance.check_out IS NULL THEN
         v_check_in  := v_attendance.check_in;
         v_check_out := NOW();
 
-        -- Minutes worked in this session
         v_session_minutes := ROUND(
-            EXTRACT(EPOCH FROM (v_check_out - v_check_in)) / 60.0,
-            2
+            EXTRACT(EPOCH FROM (v_check_out - v_check_in)) / 60.0, 2
         );
 
-        -- Accumulated minutes = previous accumulated + this session
         v_accumulated := COALESCE(v_attendance.accumulated_minutes, 0) + v_session_minutes;
         v_total_hours := ROUND(v_accumulated / 60.0, 2);
 
-        -- Financial constants
         v_daily_rate    := COALESCE(v_profile.monthly_salary, 0) / 30.0;
         v_minutely_rate := v_daily_rate / (v_profile.required_hours * 60.0);
 
-        -- Calculate penalty / overtime based on TOTAL accumulated minutes
         IF v_total_hours >= v_profile.required_hours THEN
-            -- Employee met or exceeded requirement → overtime only
             v_overtime_min := ROUND((v_total_hours - v_profile.required_hours) * 60, 0)::NUMERIC(6,0);
             v_penalty_min  := 0;
             v_overtime_amount := ROUND(v_overtime_min * v_minutely_rate);
             v_penalty_amount  := 0;
         ELSE
-            -- Employee is short → penalty (no overtime)
             v_overtime_min    := 0;
             v_overtime_amount := 0;
             v_penalty_min := ROUND((v_profile.required_hours * 60 - v_accumulated), 0)::NUMERIC(6,0);
-            -- Financial penalty = missing_minutes * minutely_rate, capped at daily_rate
             v_penalty_amount := LEAST(
                 ROUND(v_penalty_min * v_minutely_rate),
                 ROUND(v_daily_rate)
             );
         END IF;
 
-        -- Status: penalty > 0 means early checkout
         IF v_penalty_min > 0 THEN
             v_status := 'early_checkout';
         ELSE
             v_status := v_attendance.status;
         END IF;
 
-        -- Update the existing daily row
         UPDATE public.attendance
            SET check_out           = v_check_out,
                accumulated_minutes = v_accumulated,
@@ -343,13 +433,12 @@ BEGIN
     END IF;
 
     -- ============================================================
-    -- 5c. Row exists with check_out IS NOT NULL → RE-CHECK-IN
+    -- 7c. Row exists with check_out IS NOT NULL → RE-CHECK-IN
+    --     Updates check_in to now and clears check_out so the next
+    --     scan in step 7b accumulates another session.
     -- ============================================================
-    -- Start a new session in the same daily row
     v_check_in := NOW();
-
-    -- Keep the original check-in status (don't change to 'late' for re-entries)
-    v_status := v_attendance.status;
+    v_status   := v_attendance.status;
 
     UPDATE public.attendance
        SET check_in  = v_check_in,
@@ -361,15 +450,14 @@ BEGIN
         'action',         'check_in',
         'attendance_id',  v_attendance.id,
         'status',         v_status,
-        'check_in',       v_check_in,
-        'session',        2
+        'check_in',       v_check_in
     );
 
 EXCEPTION
     WHEN OTHERS THEN
         RETURN jsonb_build_object(
-            'success',      false,
-            'error',        SQLERRM
+            'success', false,
+            'error',   SQLERRM
         );
 END;
 $$;
