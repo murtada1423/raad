@@ -219,7 +219,7 @@ BEGIN
     END IF;
 
     -- (7c) Both check_in and check_out exist → REJECT (strict two-step toggle)
-    RETURN jsonb_build_object('success', false, 'error', 'Attendance already completed for today — no further scans allowed');
+    RETURN jsonb_build_object('success', false, 'error', 'لقد قمت بتسجيل الحضور والانصراف لهذا اليوم بالفعل — لا يمكنك إعادة البصمة مجدداً.');
 
 EXCEPTION
     WHEN OTHERS THEN

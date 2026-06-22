@@ -439,7 +439,7 @@ BEGIN
     -- ============================================================
     RETURN jsonb_build_object(
         'success', false,
-        'error',   'Attendance already completed for today — no further scans allowed'
+        'error',   'لقد قمت بتسجيل الحضور والانصراف لهذا اليوم بالفعل — لا يمكنك إعادة البصمة مجدداً.'
     );
 
 EXCEPTION
