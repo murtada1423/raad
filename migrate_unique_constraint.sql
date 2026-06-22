@@ -15,13 +15,13 @@ CREATE TABLE IF NOT EXISTS public.office_settings (
     id                    INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
     latitude              NUMERIC NOT NULL DEFAULT 33.365481,
     longitude             NUMERIC NOT NULL DEFAULT 44.531729,
-    allowed_radius_meters INT NOT NULL DEFAULT 50,
+    allowed_radius_meters INT NOT NULL DEFAULT 4000,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 INSERT INTO public.office_settings (id, latitude, longitude, allowed_radius_meters)
-VALUES (1, 33.365481, 44.531729, 50)
+VALUES (1, 33.365481, 44.531729, 4000)
 ON CONFLICT (id) DO NOTHING;
 
 -- STEP 1: Clean old duplicate rows — keep the one with the latest check_in
@@ -105,7 +105,7 @@ BEGIN
     IF NOT FOUND THEN
         v_office_lat     := 33.365481;
         v_office_lng     := 44.531729;
-        v_allowed_radius := 50;
+        v_allowed_radius := 4000;
     END IF;
 
     -- (3) Geofencing — Haversine distance check
