@@ -128,6 +128,8 @@ export default function AdminDashboard() {
   const [editingEmployee, setEditingEmployee] = useState(null)
   const [editSalary, setEditSalary] = useState('')
   const [editHours, setEditHours] = useState('')
+  const [editCheckIn, setEditCheckIn] = useState('16:00')
+  const [editCheckOut, setEditCheckOut] = useState('00:00')
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState({ type: '', message: '' })
   const [profilesMap, setProfilesMap] = useState({})
@@ -153,6 +155,12 @@ export default function AdminDashboard() {
 
   const iqd = (value) =>
     new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value) + ' د.ع'
+
+  const formatSalaryInput = (raw) => {
+    const digits = raw.replace(/\D/g, '')
+    if (!digits) return ''
+    return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  }
 
   const statusDisplay = (a) => {
     const statusMap = { present: 'حاضر', late: 'متأخر', early_checkout: 'مغادرة مبكرة', absent: 'غائب' }
@@ -265,15 +273,24 @@ export default function AdminDashboard() {
 
     const { error } = await supabase
       .from('profiles')
-      .update({ monthly_salary: salary, required_hours: hours })
+      .update({
+        monthly_salary: salary,
+        required_hours: hours,
+        check_in_time: editCheckIn,
+        check_out_time: editCheckOut,
+      })
       .eq('id', editingEmployee.id)
 
     if (error) {
       showToast('error', error.message || 'فشل التحديث')
     } else {
-      showToast('success', `تم تحديث البيانات المالية لـ ${editingEmployee.full_name}`)
+      showToast('success', `تم تحديث بيانات ${editingEmployee.full_name}`)
       setEmployees((prev) =>
-        prev.map((e) => (e.id === editingEmployee.id ? { ...e, monthly_salary: salary, required_hours: hours } : e))
+        prev.map((e) =>
+          e.id === editingEmployee.id
+            ? { ...e, monthly_salary: salary, required_hours: hours, check_in_time: editCheckIn, check_out_time: editCheckOut }
+            : e
+        )
       )
       setEditingEmployee(null)
     }
@@ -343,6 +360,8 @@ export default function AdminDashboard() {
     setEditingEmployee(employee)
     setEditSalary(String(employee.monthly_salary))
     setEditHours(String(employee.required_hours))
+    setEditCheckIn(employee.check_in_time || '16:00')
+    setEditCheckOut(employee.check_out_time || '00:00')
   }
 
   function handleSignOut() {
@@ -409,7 +428,7 @@ export default function AdminDashboard() {
               </svg>
             </div>
             <p style={s.statLabel}>الإضافي هذا الشهر</p>
-            <p style={s.statValue} dir="ltr">{stats.overtimeThisMonth > 0 ? `${stats.overtimeThisMonth}د` : '0د'}</p>
+            <p style={s.statValue} dir="ltr">{stats.overtimeThisMonth > 0 ? iqd(stats.overtimeThisMonth) : '0 د.ع'}</p>
           </div>
           <div style={s.statCard}>
             <div style={{ ...s.statIcon, background: 'rgba(255,69,58,0.1)' }}>
@@ -418,7 +437,7 @@ export default function AdminDashboard() {
               </svg>
             </div>
             <p style={s.statLabel}>الخصومات هذا الشهر</p>
-            <p style={s.statValue} dir="ltr">{stats.penaltiesThisMonth > 0 ? `${stats.penaltiesThisMonth}د` : '0د'}</p>
+            <p style={s.statValue} dir="ltr">{stats.penaltiesThisMonth > 0 ? iqd(stats.penaltiesThisMonth) : '0 د.ع'}</p>
           </div>
         </div>
 
@@ -442,7 +461,7 @@ export default function AdminDashboard() {
                   <span style={s.th}>الاسم</span>
                   <span style={s.th}>الراتب الشهري</span>
                   <span style={s.th}>الساعات</span>
-                  <span style={s.th}>الإجراءات</span>
+                  <span style={{ ...s.th, textAlign: 'center' }}>الإجراءات</span>
                 </div>
                 {employees.map((emp) => (
                   <div key={emp.id} style={s.tableRow}>
@@ -542,7 +561,7 @@ export default function AdminDashboard() {
               </svg>
             </div>
 
-            <h3 style={s.modalTitle}>تعديل البيانات المالية</h3>
+            <h3 style={s.modalTitle}>تعديل بيانات الموظف</h3>
             <p style={s.modalSub}>{editingEmployee.full_name}</p>
 
             <div style={s.modalForm}>
@@ -567,6 +586,26 @@ export default function AdminDashboard() {
                   min="1"
                   max="24"
                   step="0.5"
+                />
+              </div>
+              <div style={s.inputGroup}>
+                <label style={s.label}>وقت الدخول الرسمي</label>
+                <input
+                  type="time"
+                  value={editCheckIn}
+                  onChange={(e) => setEditCheckIn(e.target.value)}
+                  style={s.input}
+                  dir="ltr"
+                />
+              </div>
+              <div style={s.inputGroup}>
+                <label style={s.label}>وقت الخروج الرسمي</label>
+                <input
+                  type="time"
+                  value={editCheckOut}
+                  onChange={(e) => setEditCheckOut(e.target.value)}
+                  style={s.input}
+                  dir="ltr"
                 />
               </div>
             </div>
@@ -636,12 +675,14 @@ export default function AdminDashboard() {
               <div style={s.inputGroup}>
                 <label style={s.label}>الراتب الشهري الأساسي (د.ع)</label>
                 <input
-                  type="number"
-                  value={addSalary}
-                  onChange={(e) => setAddSalary(e.target.value)}
+                  type="text"
+                  value={formatSalaryInput(addSalary)}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '')
+                    setAddSalary(digits)
+                  }}
                   style={s.input}
-                  min="0"
-                  step="1000"
+                  inputMode="numeric"
                   dir="ltr"
                 />
               </div>
@@ -686,7 +727,7 @@ const s = {
   wrapper: {
     minHeight: '100vh',
     background: '#f5f5f7',
-    fontFamily: 'Tajawal, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
     color: '#1d1d1f',
   },
   container: {
@@ -879,10 +920,11 @@ const s = {
     textAlign: 'right',
   },
   tdAction: {
-    textAlign: 'right',
+    textAlign: 'center',
     display: 'flex',
     gap: 6,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   editBtn: {
     padding: '6px 14px',
