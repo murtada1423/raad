@@ -157,6 +157,13 @@ export default function EmployeeDashboard() {
     if (profile) loadData(profile.id)
   }, [viewMonth, viewYear, profile])
 
+  // Periodic polling fallback (every 30s) to keep data fresh
+  useEffect(() => {
+    if (!profile) return
+    const id = setInterval(() => { loadData(profile.id) }, 30000)
+    return () => clearInterval(id)
+  }, [profile])
+
   // Initialize scanner when modal opens
   useEffect(() => {
     if (!showScanner) return

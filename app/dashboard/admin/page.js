@@ -362,6 +362,13 @@ export default function AdminDashboard() {
     }
   }, [profile])
 
+  // Periodic polling fallback (every 30s) to keep data fresh
+  useEffect(() => {
+    if (!profile) return
+    const id = setInterval(() => { loadData() }, 30000)
+    return () => clearInterval(id)
+  }, [profile])
+
   // Reset month/year filter when viewing a different employee
   useEffect(() => {
     if (selectedEmployee) {
