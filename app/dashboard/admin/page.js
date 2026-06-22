@@ -193,19 +193,26 @@ export default function AdminDashboard() {
     return `${h} ساعة و ${m} دقيقة`
   }
 
-  const dynamicMinuteRate = (salary, totalDaysInMonth, requiredHours) => {
+  const computeDailyDeduction = (totalHours, salary, totalDaysInMonth, requiredHours) => {
+    if (totalHours == null || totalHours <= 0) return 0
+    const totalWorkedMinutes = Math.round(totalHours * 60)
+    const requiredMinutes = requiredHours * 60
+    if (totalWorkedMinutes >= requiredMinutes) return 0
+    const deficitMinutes = requiredMinutes - totalWorkedMinutes
     const dailyRate = salary / totalDaysInMonth
-    return dailyRate / (requiredHours * 60)
+    const minuteRate = dailyRate / requiredMinutes
+    return Math.round(deficitMinutes * minuteRate)
   }
 
-  const calcDeduction = (penaltyMinutes, salary, totalDaysInMonth, requiredHours) => {
-    if (!penaltyMinutes || penaltyMinutes <= 0) return 0
-    return Math.round(penaltyMinutes * dynamicMinuteRate(salary, totalDaysInMonth, requiredHours))
-  }
-
-  const calcAddition = (overtimeMinutes, salary, totalDaysInMonth, requiredHours) => {
-    if (!overtimeMinutes || overtimeMinutes <= 0) return 0
-    return Math.round(overtimeMinutes * dynamicMinuteRate(salary, totalDaysInMonth, requiredHours))
+  const computeDailyAddition = (totalHours, salary, totalDaysInMonth, requiredHours) => {
+    if (totalHours == null || totalHours <= 0) return 0
+    const totalWorkedMinutes = Math.round(totalHours * 60)
+    const requiredMinutes = requiredHours * 60
+    if (totalWorkedMinutes <= requiredMinutes) return 0
+    const extraMinutes = totalWorkedMinutes - requiredMinutes
+    const dailyRate = salary / totalDaysInMonth
+    const minuteRate = dailyRate / requiredMinutes
+    return Math.round(extraMinutes * minuteRate)
   }
 
   const getEmployeePay = (employeeId) => employeeSalaryMap[employeeId] || { monthly_salary: 0, required_hours: 8 }
@@ -249,7 +256,7 @@ export default function AdminDashboard() {
           const pay = empList.find((e) => e.id === a.employee_id)
           const sal = pay?.monthly_salary || 0
           const hrs = pay?.required_hours || 8
-          return sum + calcAddition(a.overtime_minutes, sal, currentMonthDays, hrs)
+          return sum + computeDailyAddition(a.total_hours, sal, currentMonthDays, hrs)
         }, 0)
       : 0
 
@@ -258,7 +265,7 @@ export default function AdminDashboard() {
           const pay = empList.find((e) => e.id === a.employee_id)
           const sal = pay?.monthly_salary || 0
           const hrs = pay?.required_hours || 8
-          return sum + calcDeduction(a.penalty_minutes, sal, currentMonthDays, hrs)
+          return sum + computeDailyDeduction(a.total_hours, sal, currentMonthDays, hrs)
         }, 0)
       : 0
 
@@ -707,8 +714,8 @@ export default function AdminDashboard() {
                       </div>
                       {orderedAttendance.map((a) => {
                         const pay = getEmployeePay(a.employee_id)
-                        const penAmt = calcDeduction(a.penalty_minutes, pay.monthly_salary, currentMonthDays, pay.required_hours)
-                        const overAmt = calcAddition(a.overtime_minutes, pay.monthly_salary, currentMonthDays, pay.required_hours)
+                        const penAmt = computeDailyDeduction(a.total_hours, pay.monthly_salary, currentMonthDays, pay.required_hours)
+                        const overAmt = computeDailyAddition(a.total_hours, pay.monthly_salary, currentMonthDays, pay.required_hours)
                         const statusColor =
                           a.status === 'present' ? '#34c759' :
                           a.status === 'late' ? '#cc9a00' :
@@ -1126,7 +1133,7 @@ export default function AdminDashboard() {
                     {records.map((r) => {
                       const pay = getEmployeePay(r.employee_id)
                       const selMonthDays = new Date(viewYear, viewMonth, 0).getDate()
-                      const penAmt = calcDeduction(r.penalty_minutes, pay.monthly_salary, selMonthDays, pay.required_hours)
+                      const penAmt = computeDailyDeduction(r.total_hours, pay.monthly_salary, selMonthDays, pay.required_hours)
                       const sColor =
                         r.status === 'present' ? '#34c759' :
                         r.status === 'late' ? '#cc9a00' :
