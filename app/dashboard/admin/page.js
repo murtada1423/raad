@@ -177,6 +177,16 @@ export default function AdminDashboard() {
     return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   }
 
+  const formatHours = (decimalHours) => {
+    if (decimalHours == null || isNaN(decimalHours)) return '—'
+    const totalMinutes = Math.round(decimalHours * 60)
+    const h = Math.floor(totalMinutes / 60)
+    const m = totalMinutes % 60
+    if (h === 0) return `${m} دقيقة`
+    if (m === 0) return `${h} ساعة`
+    return `${h} ساعة و ${m} دقيقة`
+  }
+
   const dailyRate = (salary, hours) => salary / 30
   const hourlyRate = (salary, hours) => dailyRate(salary, hours) / hours
   const minutelyRate = (salary, hours) => hourlyRate(salary, hours) / 60
@@ -466,7 +476,7 @@ export default function AdminDashboard() {
 
       <style>{`
         @media (max-width: 767px) {
-          .adm-side { position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important; top: auto !important; width: 100% !important; height: 60px !important; border-right: none !important; border-top: 1px solid rgba(0,0,0,0.06) !important; flex-direction: row !important; z-index: 100 !important; border-radius: 0 !important; }
+          .adm-side { position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important; top: auto !important; width: 100% !important; height: 60px !important; border-left: none !important; border-top: 1px solid rgba(0,0,0,0.06) !important; flex-direction: row !important; z-index: 100 !important; border-radius: 0 !important; }
           .adm-side-head { display: none !important; }
           .adm-side-bottom { display: none !important; }
           .adm-side-nav { flex-direction: row !important; padding: 0 !important; justify-content: space-around !important; align-items: center !important; }
@@ -477,7 +487,7 @@ export default function AdminDashboard() {
         }
       `}</style>
 
-      <div style={{ display: 'flex', flexDirection: 'row', minHeight: '100vh' }}>
+      <div style={{ display: 'flex', flexDirection: 'row-reverse', minHeight: '100vh' }}>
         {/* Sidebar */}
         <div className="adm-side" style={s.sidebar}>
           <div className="adm-side-head" style={s.sidebarHeader}>
@@ -619,7 +629,7 @@ export default function AdminDashboard() {
                             <span style={s.tdName}>{profilesMap[a.employee_id] || 'غير معروف'}</span>
                             <span style={s.td}>{new Date(a.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
                             <span style={s.td}>{a.check_out ? new Date(a.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-                            <span style={s.td}>{a.total_hours ? `${a.total_hours.toFixed(1)}س` : '—'}</span>
+                            <span style={s.td}>{a.total_hours ? formatHours(a.total_hours) : '—'}</span>
                             <span style={{ ...s.td, color: overAmt > 0 ? '#34c759' : '#aeaeb2' }}>
                               {overAmt > 0 ? iqd(overAmt) : '—'}
                             </span>
@@ -672,7 +682,7 @@ export default function AdminDashboard() {
                         <div key={emp.id} style={s.tableRow}>
                           <span style={s.tdName}>{emp.full_name}</span>
                           <span style={s.td} dir="ltr">{iqd(emp.monthly_salary)}</span>
-                          <span style={s.td} dir="ltr">{emp.required_hours}س</span>
+                          <span style={s.td}>{formatHours(emp.required_hours)}</span>
                           <span style={s.tdAction}>
                             <button style={s.editBtn} onClick={() => openEdit(emp)}>تعديل</button>
                             <button style={s.deleteBtn} onClick={() => setDeleteTarget(emp)}>
@@ -1305,7 +1315,7 @@ const s = {
     width: 240,
     background: 'rgba(255,255,255,0.9)',
     backdropFilter: 'blur(24px) saturate(180%)',
-    borderRight: '1px solid rgba(0,0,0,0.06)',
+    borderLeft: '1px solid rgba(0,0,0,0.06)',
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
