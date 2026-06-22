@@ -149,6 +149,8 @@ export default function AdminDashboard() {
   const [savingGeo, setSavingGeo] = useState(false)
   const [loadingGeo, setLoadingGeo] = useState(true)
   const [activeTab, setActiveTab] = useState('dashboard')
+  const [selectedEmployee, setSelectedEmployee] = useState(null)
+  const [monthAttendanceRecords, setMonthAttendanceRecords] = useState([])
   const router = useRouter()
   const supabase = createClient()
   const channelRef = useRef(null)
@@ -212,7 +214,7 @@ export default function AdminDashboard() {
     const [{ count: totalEmployees }, { data: todayAttendance }, { data: monthAttendance }, { data: employees }, { data: allProfiles }] = await Promise.all([
       supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'employee'),
       supabase.from('attendance').select('*').eq('date', today),
-      supabase.from('attendance').select('*').gte('date', monthStart).lte('date', today).not('check_out', 'is', null),
+      supabase.from('attendance').select('*').gte('date', monthStart).lte('date', today),
       supabase.from('profiles').select('*').eq('role', 'employee').order('full_name'),
       supabase.from('profiles').select('id, full_name'),
     ])
@@ -235,8 +237,10 @@ export default function AdminDashboard() {
       }
     }
 
-    const overtimeAmtThisMonth = dedupMonth.length
-      ? dedupMonth.reduce((sum, a) => {
+    const completedMonth = dedupMonth.filter((a) => a.check_out)
+
+    const overtimeAmtThisMonth = completedMonth.length
+      ? completedMonth.reduce((sum, a) => {
           const pay = empList.find((e) => e.id === a.employee_id)
           const sal = pay?.monthly_salary || 0
           const hrs = pay?.required_hours || 8
@@ -244,8 +248,8 @@ export default function AdminDashboard() {
         }, 0)
       : 0
 
-    const penaltiesAmtThisMonth = dedupMonth.length
-      ? dedupMonth.reduce((sum, a) => {
+    const penaltiesAmtThisMonth = completedMonth.length
+      ? completedMonth.reduce((sum, a) => {
           const pay = empList.find((e) => e.id === a.employee_id)
           const sal = pay?.monthly_salary || 0
           const hrs = pay?.required_hours || 8
@@ -256,6 +260,7 @@ export default function AdminDashboard() {
     setStats({ totalEmployees: totalEmployees || 0, presentToday, overtimeThisMonth: overtimeAmtThisMonth, penaltiesThisMonth: penaltiesAmtThisMonth })
     setEmployees(empList)
     setAttendanceList(todayAttendance || [])
+    setMonthAttendanceRecords(dedupMonth)
 
     const map = {}
     ;(allProfiles || []).forEach((p) => { map[p.id] = p.full_name })
@@ -319,6 +324,7 @@ export default function AdminDashboard() {
       if (!mounted) return
       setProfile(p)
       await Promise.all([loadData(), loadOfficeSettings()])
+      syncAbsences()
       setLoading(false)
     }
     init()
@@ -458,6 +464,57 @@ export default function AdminDashboard() {
   function handleSignOut() {
     supabase.auth.signOut()
     router.push('/login')
+  }
+
+  async function syncAbsences() {
+    const now = new Date()
+    if (now.getHours() < 4) return
+    const yesterday = new Date(now)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = yesterday.toISOString().slice(0, 10)
+    const { data: existing } = await supabase
+      .from('attendance')
+      .select('employee_id')
+      .eq('date', yesterdayStr)
+    const recorded = new Set((existing || []).map((a) => a.employee_id))
+    const { data: emps } = await supabase
+      .from('profiles')
+      .select('id, monthly_salary, required_hours')
+      .eq('role', 'employee')
+    if (!emps?.length) return
+    for (const emp of emps) {
+      if (!recorded.has(emp.id)) {
+        const dailyMinutes = (emp.required_hours || 8) * 60
+        await supabase.from('attendance').upsert({
+          employee_id: emp.id,
+          date: yesterdayStr,
+          status: 'absent',
+          check_in: null,
+          check_out: null,
+          total_hours: 0,
+          overtime_minutes: 0,
+          penalty_minutes: dailyMinutes,
+        }, { onConflict: 'employee_id,date' })
+      }
+    }
+  }
+
+  const getEmployeeMonthRecords = (employeeId) => {
+    if (!monthAttendanceRecords.length) return []
+    return monthAttendanceRecords
+      .filter((a) => a.employee_id === employeeId)
+      .sort((a, b) => b.date.localeCompare(a.date))
+  }
+
+  const getEmployeeStats = (emp) => {
+    const records = getEmployeeMonthRecords(emp.id)
+    const attendanceDays = records.filter((a) => a.status !== 'absent').length
+    const msPerDay = 86400000
+    const allDays = Math.floor((new Date(today) - new Date(monthStart)) / msPerDay) + 1
+    const absenceDays = Math.max(0, allDays - attendanceDays)
+    const monthlySalary = emp.monthly_salary || 0
+    const dailySalary = Math.round(monthlySalary / 30)
+    return { attendanceDays, absenceDays, monthlySalary, dailySalary }
   }
 
   if (loading) {
@@ -679,7 +736,7 @@ export default function AdminDashboard() {
                         <span style={{ ...s.th, textAlign: 'center' }}>الإجراءات</span>
                       </div>
                       {employees.map((emp) => (
-                        <div key={emp.id} style={s.tableRow}>
+                        <div key={emp.id} style={{ ...s.tableRow, cursor: 'pointer' }} onClick={() => setSelectedEmployee(emp)}>
                           <span style={s.tdName}>{emp.full_name}</span>
                           <span style={s.td} dir="ltr">{iqd(emp.monthly_salary)}</span>
                           <span style={s.td}>{formatHours(emp.required_hours)}</span>
@@ -917,6 +974,122 @@ export default function AdminDashboard() {
           onCancel={() => { if (!deleting) setDeleteTarget(null) }}
         />
       )}
+
+      {/* Employee Detail Modal */}
+      {selectedEmployee && (() => {
+        const emp = selectedEmployee
+        const stats = getEmployeeStats(emp)
+        const records = getEmployeeMonthRecords(emp.id)
+        return (
+          <div style={s.overlay} onClick={() => setSelectedEmployee(null)}>
+            <div style={{ ...s.modal, maxWidth: 700, maxHeight: '85vh', overflowY: 'auto', padding: 32 }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
+                <div>
+                  <h3 style={{ fontSize: 20, fontWeight: 700, color: '#1d1d1f', margin: 0 }}>
+                    {emp.full_name}
+                  </h3>
+                  <p style={{ fontSize: 13, color: '#6e6e73', margin: '2px 0 0', fontWeight: 500 }}>
+                    سجل حضور {monthStart} — {today}
+                  </p>
+                </div>
+                <button style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '8px 16px', fontSize: 13, fontWeight: 600,
+                  color: '#6e6e73', background: 'rgba(0,0,0,0.04)',
+                  border: '1px solid rgba(0,0,0,0.06)', borderRadius: 10,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }} onClick={() => setSelectedEmployee(null)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+                  </svg>
+                  عودة
+                </button>
+              </div>
+
+              {/* Summary Cards */}
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 28,
+              }}>
+                <div style={s.statCard}>
+                  <p style={s.statLabel}>أيام الحضور</p>
+                  <p style={{ ...s.statValue, color: '#34c759' }} dir="ltr">{stats.attendanceDays}</p>
+                </div>
+                <div style={s.statCard}>
+                  <p style={s.statLabel}>أيام الغياب</p>
+                  <p style={{ ...s.statValue, color: '#ff453a' }} dir="ltr">{stats.absenceDays}</p>
+                </div>
+                <div style={s.statCard}>
+                  <p style={s.statLabel}>الراتب الشهري</p>
+                  <p style={{ ...s.statValue, fontSize: 18 }} dir="ltr">{iqd(stats.monthlySalary)}</p>
+                </div>
+                <div style={s.statCard}>
+                  <p style={s.statLabel}>الراتب اليومي</p>
+                  <p style={{ ...s.statValue, fontSize: 18 }} dir="ltr">{iqd(stats.dailySalary)}</p>
+                </div>
+              </div>
+
+              {/* History Table */}
+              <h4 style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f', margin: '0 0 14px' }}>سجل الحضور الشهري</h4>
+              {records.length === 0 ? (
+                <div style={s.emptyState}><p>لا توجد سجلات لهذا الموظف في الشهر الحالي.</p></div>
+              ) : (
+                <div style={s.tableResponsive}>
+                  <div style={s.table}>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 0.8fr 0.8fr 1fr 0.8fr 0.8fr',
+                      gap: 8, padding: '10px 0',
+                      borderBottom: '1px solid rgba(0,0,0,0.06)',
+                    }}>
+                      <span style={s.th}>التاريخ</span>
+                      <span style={s.th}>دخول</span>
+                      <span style={s.th}>خروج</span>
+                      <span style={s.th}>ساعات العمل</span>
+                      <span style={s.th}>الخصم (د.ع)</span>
+                      <span style={s.th}>الحالة</span>
+                    </div>
+                    {records.map((r) => {
+                      const pay = getEmployeePay(r.employee_id)
+                      const penAmt = calcPenaltyAmount(r.penalty_minutes, pay.monthly_salary, pay.required_hours)
+                      const sColor =
+                        r.status === 'present' ? '#34c759' :
+                        r.status === 'late' ? '#cc9a00' :
+                        r.status === 'early_checkout' ? '#ff453a' : '#aeaeb2'
+                      const bBg =
+                        r.status === 'present' ? 'rgba(52,199,89,0.1)' :
+                        r.status === 'late' ? 'rgba(204,154,0,0.1)' :
+                        r.status === 'early_checkout' ? 'rgba(255,69,58,0.1)' :
+                        'rgba(0,0,0,0.04)'
+                      return (
+                        <div key={r.id} style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 0.8fr 0.8fr 1fr 0.8fr 0.8fr',
+                          gap: 8, padding: '10px 0',
+                          borderBottom: '1px solid rgba(0,0,0,0.04)',
+                          alignItems: 'center',
+                        }}>
+                          <span style={s.td}>{r.date}</span>
+                          <span style={s.td}>{r.check_in ? new Date(r.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                          <span style={s.td}>{r.check_out ? new Date(r.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                          <span style={s.td}>{formatHours(r.total_hours)}</span>
+                          <span style={{ ...s.td, color: penAmt > 0 ? '#ff453a' : '#aeaeb2' }}>
+                            {penAmt > 0 ? iqd(penAmt) : '—'}
+                          </span>
+                          <span>
+                            <span style={{ ...s.badge, background: bBg, color: sColor }}>
+                              {statusDisplay(r)}
+                            </span>
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
