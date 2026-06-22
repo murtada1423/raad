@@ -55,6 +55,9 @@ export default function EmployeeDashboard() {
   const [scanning, setScanning] = useState(false)
   const [toast, setToast] = useState({ type: '', message: '' })
   const [cameraError, setCameraError] = useState('')
+  const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1)
+  const [viewYear, setViewYear] = useState(new Date().getFullYear())
+  const [monthRecords, setMonthRecords] = useState([])
 
   const router = useRouter()
   const supabase = createClient()
@@ -86,14 +89,20 @@ export default function EmployeeDashboard() {
 
     if (today.data) setAttendance(today.data[0] || null)
 
+    const ms = String(viewMonth).padStart(2, '0')
+    const prefix = `${viewYear}-${ms}`
+    const monthStart = `${prefix}-01`
+    const totalDays = new Date(viewYear, viewMonth, 0).getDate()
+    const monthEnd = `${prefix}-${String(totalDays).padStart(2, '0')}`
+
     const hist = await supabase
       .from('attendance')
       .select('*')
       .eq('employee_id', userId)
-      .not('check_out', 'is', null)
+      .gte('date', monthStart)
+      .lte('date', monthEnd)
       .order('date', { ascending: false })
       .order('check_in', { ascending: false })
-      .limit(10)
 
     if (hist.data) {
       const seen = new Set()
@@ -102,8 +111,19 @@ export default function EmployeeDashboard() {
         seen.add(r.date)
         return true
       })
+      setMonthRecords(hist.data)
       setHistory(deduped)
     }
+  }
+
+  const formatHours = (decimalHours) => {
+    if (decimalHours == null || isNaN(decimalHours)) return '—'
+    const totalMinutes = Math.round(decimalHours * 60)
+    const h = Math.floor(totalMinutes / 60)
+    const m = totalMinutes % 60
+    if (h === 0) return `${m} دقيقة`
+    if (m === 0) return `${h} ساعة`
+    return `${h} ساعة و ${m} دقيقة`
   }
 
   useEffect(() => {
@@ -131,6 +151,11 @@ export default function EmployeeDashboard() {
     init()
     return () => { mounted = false }
   }, [])
+
+  // Reload monthly data when year/month filter changes
+  useEffect(() => {
+    if (profile) loadData(profile.id)
+  }, [viewMonth, viewYear, profile])
 
   // Initialize scanner when modal opens
   useEffect(() => {
@@ -243,7 +268,8 @@ export default function EmployeeDashboard() {
     router.push('/login')
   }
 
-  const dailyRate = profile ? profile.monthly_salary / 30 : 0
+  const totalDaysInMonth = new Date(viewYear, viewMonth, 0).getDate()
+  const dailyRate = profile ? Math.round(profile.monthly_salary / totalDaysInMonth) : 0
   const hasAttendance = !!(attendance?.check_in)
 
   let hoursWorked = 0
@@ -262,6 +288,20 @@ export default function EmployeeDashboard() {
 
   const iqd = (value) =>
     new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value) + ' د.ع'
+
+  const presentMonthRecords = monthRecords.filter((r) => r.status !== 'absent')
+  const attendanceDays = presentMonthRecords.length
+  const absenceDays = totalDaysInMonth - attendanceDays
+  const monthlySalary = profile?.monthly_salary || 0
+  const reqHours = profile?.required_hours || 8
+  const totalOvertime = presentMonthRecords.reduce((s, r) => {
+    return s + (r.overtime_minutes ? Math.round(r.overtime_minutes * (dailyRate / reqHours / 60)) : 0)
+  }, 0)
+  const totalPunchDeductions = presentMonthRecords.reduce((s, r) => {
+    return s + (r.penalty_minutes ? Math.round(r.penalty_minutes * (dailyRate / reqHours / 60)) : 0)
+  }, 0)
+  const totalAbsenceDeductions = absenceDays >= totalDaysInMonth ? monthlySalary : absenceDays * dailyRate
+  const netPayable = Math.max(0, monthlySalary + totalOvertime - totalAbsenceDeductions - totalPunchDeductions)
 
   if (loading) {
     return (
@@ -292,7 +332,12 @@ export default function EmployeeDashboard() {
               </svg>
               تسجيل الحضور
             </button>
-            <button style={styles.signOut} onClick={handleSignOut}>تسجيل الخروج</button>
+            <button style={styles.signOutRed} onClick={handleSignOut}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              تسجيل الخروج
+            </button>
           </div>
         </header>
 
@@ -329,7 +374,7 @@ export default function EmployeeDashboard() {
         <div style={styles.statsGrid}>
           <div style={styles.statCard}>
             <p style={styles.statLabel}>ساعات العمل</p>
-            <p style={styles.statValue}>{hasAttendance ? <span dir="ltr">{hoursWorked.toFixed(1)}س</span> : '—'}</p>
+            <p style={styles.statValue}>{hasAttendance ? formatHours(hoursWorked) : '—'}</p>
           </div>
           <div style={styles.statCard}>
             <p style={styles.statLabel}>المكتسب اليوم</p>
@@ -353,28 +398,70 @@ export default function EmployeeDashboard() {
           </div>
         </div>
 
+        {/* Month / Year Filters */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+          <select value={viewMonth} onChange={(e) => setViewMonth(Number(e.target.value))} style={{
+            padding: '10px 14px', fontSize: 14, fontWeight: 600,
+            color: '#1d1d1f', background: '#ffffff',
+            border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10,
+            outline: 'none', fontFamily: 'inherit', cursor: 'pointer', flex: 1,
+          }}>
+            {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
+              <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+            ))}
+          </select>
+          <select value={viewYear} onChange={(e) => setViewYear(Number(e.target.value))} style={{
+            padding: '10px 14px', fontSize: 14, fontWeight: 600,
+            color: '#1d1d1f', background: '#ffffff',
+            border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10,
+            outline: 'none', fontFamily: 'inherit', cursor: 'pointer', flex: 1,
+          }}>
+            {[2026, 2027, 2028, 2029, 2030].map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Pay Info */}
         <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>ملخص الراتب</h2>
+          <h2 style={styles.sectionTitle}>ملخص الراتب — {String(viewMonth).padStart(2, '0')}/{viewYear}</h2>
           <div style={styles.payRows}>
             <div style={styles.payRow}>
               <span style={styles.payLabel}>الراتب الشهري</span>
               <span style={styles.payValue}>
-                <span dir="ltr">{new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(profile?.monthly_salary || 0)} د.ع</span>
+                <span dir="ltr">{iqd(monthlySalary)}</span>
               </span>
             </div>
             <div style={styles.payRow}>
               <span style={styles.payLabel}>السعر اليومي</span>
               <span style={styles.payValue}>
-                <span dir="ltr">{new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(dailyRate)} د.ع</span>
+                <span dir="ltr">{iqd(dailyRate)}</span>
               </span>
             </div>
+            <div style={styles.payRow}>
+              <span style={styles.payLabel}>أيام الحضور</span>
+              <span style={{ ...styles.payValue, color: '#34c759' }}>{attendanceDays}</span>
+            </div>
+            <div style={styles.payRow}>
+              <span style={styles.payLabel}>أيام الغياب</span>
+              <span style={{ ...styles.payValue, color: '#ff453a' }}>{absenceDays}</span>
+            </div>
+            <div style={styles.payRow}>
+              <span style={styles.payLabel}>الإضافي</span>
+              <span style={{ ...styles.payValue, color: '#34c759' }}>{iqd(totalOvertime)}</span>
+            </div>
+            <div style={styles.payRow}>
+              <span style={styles.payLabel}>خصم الغياب</span>
+              <span style={{ ...styles.payValue, color: '#ff453a' }}>{iqd(totalAbsenceDeductions)}</span>
+            </div>
+            <div style={styles.payRow}>
+              <span style={styles.payLabel}>خصم التأخير</span>
+              <span style={{ ...styles.payValue, color: '#ff453a' }}>{iqd(totalPunchDeductions)}</span>
+            </div>
             <div style={{ ...styles.payRow, borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: 12, marginTop: 4 }}>
-              <span style={{ ...styles.payLabel, fontWeight: 600 }}>صافي المكتسب اليوم</span>
-              <span style={{ ...styles.payValue, fontWeight: 700, color: '#1d1d1f' }}>
-                {hasAttendance
-                  ? <span dir="ltr">{new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(netEarned)} د.ع</span>
-                  : '—'}
+              <span style={{ ...styles.payLabel, fontWeight: 700, fontSize: 15, color: '#7c3aed' }}>الراتب المستحق للشهر المحدد</span>
+              <span style={{ ...styles.payValue, fontWeight: 700, fontSize: 16, color: '#7c3aed' }}>
+                <span dir="ltr">{iqd(netPayable)}</span>
               </span>
             </div>
           </div>
@@ -401,7 +488,7 @@ export default function EmployeeDashboard() {
                   <span style={styles.td}><span dir="ltr">{new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span></span>
                   <span style={styles.td}><span dir="ltr">{new Date(r.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span></span>
                   <span style={styles.td}>{r.check_out ? <span dir="ltr">{new Date(r.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span> : '—'}</span>
-                  <span style={styles.td}>{r.total_hours ? <span dir="ltr">{r.total_hours.toFixed(1)}س</span> : '—'}</span>
+                  <span style={styles.td}>{r.total_hours ? formatHours(r.total_hours) : '—'}</span>
                   <span style={{
                     ...styles.td, fontWeight: 600,
                     color: r.status === 'present' ? '#34c759' : r.status === 'late' ? '#b8860b' : '#ff453a',
@@ -508,13 +595,16 @@ const styles = {
     fontFamily: 'inherit',
     boxShadow: '0 4px 16px rgba(124,58,237,0.25)',
   },
-  signOut: {
-    padding: '10px 18px',
-    fontSize: 14,
+  signOutRed: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '10px 16px',
+    fontSize: 13,
     fontWeight: 600,
-    color: '#6e6e73',
-    background: 'rgba(0,0,0,0.04)',
-    border: '1px solid rgba(0,0,0,0.06)',
+    color: '#ff453a',
+    background: 'rgba(255,69,58,0.08)',
+    border: '1px solid rgba(255,69,58,0.15)',
     borderRadius: 10,
     cursor: 'pointer',
     fontFamily: 'inherit',
