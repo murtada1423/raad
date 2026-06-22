@@ -476,7 +476,7 @@ export default function AdminDashboard() {
 
       <style>{`
         @media (max-width: 767px) {
-          .adm-side { position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important; top: auto !important; width: 100% !important; height: 60px !important; border-left: none !important; border-top: 1px solid rgba(0,0,0,0.06) !important; flex-direction: row !important; z-index: 100 !important; border-radius: 0 !important; }
+          .adm-side { position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important; top: auto !important; width: 100% !important; height: 60px !important; border-right: none !important; border-top: 1px solid rgba(0,0,0,0.06) !important; flex-direction: row !important; z-index: 100 !important; border-radius: 0 !important; }
           .adm-side-head { display: none !important; }
           .adm-side-bottom { display: none !important; }
           .adm-side-nav { flex-direction: row !important; padding: 0 !important; justify-content: space-around !important; align-items: center !important; }
@@ -487,7 +487,7 @@ export default function AdminDashboard() {
         }
       `}</style>
 
-      <div style={{ display: 'flex', flexDirection: 'row-reverse', minHeight: '100vh' }}>
+      <div style={{ display: 'flex', flexDirection: 'row', minHeight: '100vh' }}>
         {/* Sidebar */}
         <div className="adm-side" style={s.sidebar}>
           <div className="adm-side-head" style={s.sidebarHeader}>
@@ -1315,7 +1315,7 @@ const s = {
     width: 240,
     background: 'rgba(255,255,255,0.9)',
     backdropFilter: 'blur(24px) saturate(180%)',
-    borderLeft: '1px solid rgba(0,0,0,0.06)',
+    borderRight: '1px solid rgba(0,0,0,0.06)',
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
