@@ -151,6 +151,8 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [selectedEmployee, setSelectedEmployee] = useState(null)
   const [monthAttendanceRecords, setMonthAttendanceRecords] = useState([])
+  const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1)
+  const [viewYear, setViewYear] = useState(new Date().getFullYear())
   const router = useRouter()
   const supabase = createClient()
   const channelRef = useRef(null)
@@ -350,6 +352,15 @@ export default function AdminDashboard() {
     }
   }, [profile])
 
+  // Reset month/year filter when viewing a different employee
+  useEffect(() => {
+    if (selectedEmployee) {
+      const now = new Date()
+      setViewMonth(now.getMonth() + 1)
+      setViewYear(now.getFullYear())
+    }
+  }, [selectedEmployee])
+
   async function handleEditSave() {
     if (!editingEmployee) return
     setSaving(true)
@@ -499,26 +510,28 @@ export default function AdminDashboard() {
     }
   }
 
-  const getEmployeeMonthRecords = (employeeId) => {
+  const getEmployeeMonthRecords = (employeeId, month, year) => {
     if (!monthAttendanceRecords.length) return []
+    const prefix = `${year}-${String(month).padStart(2, '0')}`
     return monthAttendanceRecords
-      .filter((a) => a.employee_id === employeeId)
+      .filter((a) => a.employee_id === employeeId && a.date.startsWith(prefix))
       .sort((a, b) => b.date.localeCompare(a.date))
   }
 
-  const getEmployeeStats = (emp) => {
-    const records = getEmployeeMonthRecords(emp.id)
-    const attendanceDays = records.filter((a) => a.status !== 'absent').length
-    const msPerDay = 86400000
-    const allDays = Math.floor((new Date(today) - new Date(monthStart)) / msPerDay) + 1
-    const absenceDays = Math.max(0, allDays - attendanceDays)
+  const getEmployeeStatsForMonth = (emp, month, year) => {
+    const records = getEmployeeMonthRecords(emp.id, month, year)
+    const absentRecords = records.filter((a) => a.status === 'absent')
+    const presentRecords = records.filter((a) => a.status !== 'absent')
+    const attendanceDays = presentRecords.length
+    const absenceDays = absentRecords.length
     const monthlySalary = emp.monthly_salary || 0
     const requiredHours = emp.required_hours || 8
     const dailySalary = Math.round(monthlySalary / 30)
-    const totalOvertime = records.reduce((sum, r) => sum + calcOvertimeAmount(r.overtime_minutes, monthlySalary, requiredHours), 0)
-    const totalDeductions = records.reduce((sum, r) => sum + calcPenaltyAmount(r.penalty_minutes, monthlySalary, requiredHours), 0)
-    const netPayable = monthlySalary + totalOvertime - totalDeductions
-    return { attendanceDays, absenceDays, monthlySalary, dailySalary, totalOvertime, totalDeductions, netPayable }
+    const totalOvertime = presentRecords.reduce((sum, r) => sum + calcOvertimeAmount(r.overtime_minutes, monthlySalary, requiredHours), 0)
+    const totalPunchDeductions = presentRecords.reduce((sum, r) => sum + calcPenaltyAmount(r.penalty_minutes, monthlySalary, requiredHours), 0)
+    const totalAbsenceDeductions = absenceDays * dailySalary
+    const netPayable = monthlySalary + totalOvertime - totalAbsenceDeductions - totalPunchDeductions
+    return { attendanceDays, absenceDays, monthlySalary, dailySalary, totalOvertime, totalPunchDeductions, totalAbsenceDeductions, netPayable }
   }
 
   if (loading) {
@@ -982,19 +995,45 @@ export default function AdminDashboard() {
       {/* Employee Detail Modal */}
       {selectedEmployee && (() => {
         const emp = selectedEmployee
-        const stats = getEmployeeStats(emp)
-        const records = getEmployeeMonthRecords(emp.id)
+        const stats = getEmployeeStatsForMonth(emp, viewMonth, viewYear)
+        const records = getEmployeeMonthRecords(emp.id, viewMonth, viewYear)
+        const months = [
+          { val: 1, label: 'يناير' }, { val: 2, label: 'فبراير' }, { val: 3, label: 'مارس' },
+          { val: 4, label: 'أبريل' }, { val: 5, label: 'مايو' }, { val: 6, label: 'يونيو' },
+          { val: 7, label: 'يوليو' }, { val: 8, label: 'أغسطس' }, { val: 9, label: 'سبتمبر' },
+          { val: 10, label: 'أكتوبر' }, { val: 11, label: 'نوفمبر' }, { val: 12, label: 'ديسمبر' },
+        ]
+        const years = []
+        const curYear = new Date().getFullYear()
+        for (let y = curYear - 2; y <= curYear + 1; y++) years.push(y)
+        const selectStyle = {
+          padding: '8px 12px', fontSize: 13, fontWeight: 600,
+          color: '#1d1d1f', background: 'rgba(0,0,0,0.03)',
+          border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10,
+          outline: 'none', fontFamily: 'inherit', cursor: 'pointer',
+        }
         return (
           <div style={s.overlay} onClick={() => setSelectedEmployee(null)}>
-            <div style={{ ...s.modal, maxWidth: 700, maxHeight: '85vh', overflowY: 'auto', padding: 32 }} onClick={(e) => e.stopPropagation()}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
-                <div>
+            <div style={{ ...s.modal, maxWidth: 720, maxHeight: '85vh', overflowY: 'auto', padding: 32 }} onClick={(e) => e.stopPropagation()}>
+              {/* Header row: name + net salary badge + back */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <h3 style={{ fontSize: 20, fontWeight: 700, color: '#1d1d1f', margin: 0 }}>
                     {emp.full_name}
                   </h3>
-                  <p style={{ fontSize: 13, color: '#6e6e73', margin: '2px 0 0', fontWeight: 500 }}>
-                    سجل حضور {monthStart} — {today}
-                  </p>
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '6px 14px', borderRadius: 10,
+                    background: 'linear-gradient(135deg, rgba(124,58,237,0.1), rgba(59,130,246,0.1))',
+                    border: '1px solid rgba(124,58,237,0.2)',
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    </svg>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#7c3aed', whiteSpace: 'nowrap' }}>
+                      الراتب المستحق للشهر المحدد: {iqd(stats.netPayable)}
+                    </span>
+                  </div>
                 </div>
                 <button style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -1010,10 +1049,18 @@ export default function AdminDashboard() {
                 </button>
               </div>
 
-              {/* Summary Cards */}
-              <div style={{
-                display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 28,
-              }}>
+              {/* Month & Year filters */}
+              <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+                <select value={viewMonth} onChange={(e) => setViewMonth(Number(e.target.value))} style={selectStyle}>
+                  {months.map((m) => <option key={m.val} value={m.val}>{m.label}</option>)}
+                </select>
+                <select value={viewYear} onChange={(e) => setViewYear(Number(e.target.value))} style={selectStyle}>
+                  {years.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+
+              {/* Summary Cards — 4 columns (no net salary) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 28 }}>
                 <div style={s.statCard}>
                   <p style={s.statLabel}>أيام الحضور</p>
                   <p style={{ ...s.statValue, color: '#34c759' }} dir="ltr">{stats.attendanceDays}</p>
@@ -1030,16 +1077,19 @@ export default function AdminDashboard() {
                   <p style={s.statLabel}>الراتب اليومي</p>
                   <p style={{ ...s.statValue, fontSize: 18 }} dir="ltr">{iqd(stats.dailySalary)}</p>
                 </div>
-                <div style={{ ...s.statCard, background: 'linear-gradient(135deg, rgba(124,58,237,0.06), rgba(59,130,246,0.06))', border: '1px solid rgba(124,58,237,0.15)' }}>
-                  <p style={{ ...s.statLabel, color: '#7c3aed' }}>الراتب المستحق</p>
-                  <p style={{ ...s.statValue, fontSize: 18, color: '#7c3aed' }} dir="ltr">{iqd(stats.netPayable)}</p>
-                </div>
               </div>
 
               {/* History Table */}
-              <h4 style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f', margin: '0 0 14px' }}>سجل الحضور الشهري</h4>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <h4 style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f', margin: 0 }}>سجل الحضور الشهري</h4>
+                <div style={{ display: 'flex', gap: 18, fontSize: 12, color: '#6e6e73' }}>
+                  <span>الإضافي: <b style={{ color: '#34c759' }}>{iqd(stats.totalOvertime)}</b></span>
+                  <span>خصم الغياب: <b style={{ color: '#ff453a' }}>{iqd(stats.totalAbsenceDeductions)}</b></span>
+                  <span>خصم التأخير: <b style={{ color: '#ff453a' }}>{iqd(stats.totalPunchDeductions)}</b></span>
+                </div>
+              </div>
               {records.length === 0 ? (
-                <div style={s.emptyState}><p>لا توجد سجلات لهذا الموظف في الشهر الحالي.</p></div>
+                <div style={s.emptyState}><p>لا توجد سجلات لهذا الموظف في الشهر المحدد.</p></div>
               ) : (
                 <div style={s.tableResponsive}>
                   <div style={s.table}>
