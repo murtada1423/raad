@@ -14,22 +14,25 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     role            TEXT NOT NULL CHECK (role IN ('admin', 'employee')),
     monthly_salary  NUMERIC(12, 2) NOT NULL DEFAULT 450000,
     required_hours  NUMERIC(4, 1)  NOT NULL DEFAULT 8.0,
+    check_in_time   TEXT NOT NULL DEFAULT '16:00',
+    check_out_time  TEXT NOT NULL DEFAULT '00:00',
     created_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
 
 -- 2. ATTENDANCE TABLE
 CREATE TABLE IF NOT EXISTS public.attendance (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    employee_id      UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-    check_in         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    check_out        TIMESTAMPTZ,
-    date             DATE NOT NULL DEFAULT CURRENT_DATE,
-    total_hours      NUMERIC(6, 2),
-    overtime_minutes NUMERIC(6, 0) NOT NULL DEFAULT 0,
-    penalty_minutes  NUMERIC(6, 0) NOT NULL DEFAULT 0,
-    penalty_amount   NUMERIC(10, 0) NOT NULL DEFAULT 0,
-    overtime_amount  NUMERIC(10, 0) NOT NULL DEFAULT 0,
-    status           TEXT NOT NULL CHECK (status IN ('present', 'late', 'early_checkout'))
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    employee_id        UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    check_in           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    check_out          TIMESTAMPTZ,
+    date               DATE NOT NULL DEFAULT CURRENT_DATE,
+    accumulated_minutes NUMERIC(8,2) NOT NULL DEFAULT 0,
+    total_hours        NUMERIC(6, 2),
+    overtime_minutes   NUMERIC(6, 0) NOT NULL DEFAULT 0,
+    penalty_minutes    NUMERIC(6, 0) NOT NULL DEFAULT 0,
+    penalty_amount     NUMERIC(10, 0) NOT NULL DEFAULT 0,
+    overtime_amount    NUMERIC(10, 0) NOT NULL DEFAULT 0,
+    status             TEXT NOT NULL CHECK (status IN ('present', 'late', 'early_checkout'))
 );
 
 -- 3. INDEXES
@@ -134,13 +137,9 @@ CREATE POLICY attendance_insert_self
 -- ============================================================
 -- STORED FUNCTION: process_attendance_scan
 -- ============================================================
--- Parameters:
---   p_user_id      UUID     – the employee scanning the QR
---   p_lat          NUMERIC  – GPS latitude from the scan
---   p_lng          NUMERIC  – GPS longitude from the scan
---   p_qr_timestamp TIMESTAMPTZ – timestamp embedded in the QR code
---
--- Returns: JSONB   – result payload
+-- Handles multi-session check-in/check-out within a single day.
+-- Uses a SINGLE row per employee per day with accumulated minutes.
+-- Penalty:  based on total daily minutes worked, capped at daily_rate.
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.process_attendance_scan(
@@ -158,30 +157,32 @@ DECLARE
     -- office geofence constants
     c_office_lat       CONSTANT NUMERIC := 33.365481;
     c_office_lng       CONSTANT NUMERIC := 44.531729;
-    c_allowed_radius   CONSTANT NUMERIC := 4000;      -- meters (4 km)
-    c_earth_radius     CONSTANT NUMERIC := 6371000;    -- meters
+    c_allowed_radius   CONSTANT NUMERIC := 4000;
+    c_earth_radius     CONSTANT NUMERIC := 6371000;
 
     -- work-hour constants
-    c_shift_start      CONSTANT TIME := '09:00:00';    -- workday start
+    c_shift_start      CONSTANT TIME := '09:00:00';
 
     -- computed variables
-    v_distance          NUMERIC;
-    v_profile           RECORD;
-    v_attendance        RECORD;
-    v_action            TEXT;
-    v_status            TEXT;
-    v_total_hours       NUMERIC(6, 2);
-    v_overtime_min      NUMERIC(6, 0);
-    v_penalty_min       NUMERIC(6, 0);
-    v_daily_rate        NUMERIC(10, 2);
-    v_minutely_rate     NUMERIC(10, 6);
-    v_penalty_amount    NUMERIC(10, 0);
-    v_overtime_amount   NUMERIC(10, 0);
-    v_check_in          TIMESTAMPTZ;
-    v_check_out         TIMESTAMPTZ;
+    v_distance           NUMERIC;
+    v_profile            RECORD;
+    v_attendance         RECORD;
+    v_status             TEXT;
+    v_session_minutes    NUMERIC(8,2);
+    v_accumulated        NUMERIC(8,2);
+    v_total_hours        NUMERIC(6, 2);
+    v_overtime_min       NUMERIC(6, 0);
+    v_penalty_min        NUMERIC(6, 0);
+    v_daily_rate         NUMERIC(10, 2);
+    v_minutely_rate      NUMERIC(10, 6);
+    v_penalty_amount     NUMERIC(10, 0);
+    v_overtime_amount    NUMERIC(10, 0);
+    v_check_in           TIMESTAMPTZ;
+    v_check_out          TIMESTAMPTZ;
+    v_is_first_checkin   BOOLEAN;
 BEGIN
     -- ============================================================
-    -- 1. Validate QR timestamp (must be within last 5 seconds)
+    -- 1. Validate QR timestamp
     -- ============================================================
     IF p_qr_timestamp IS NULL
        OR p_qr_timestamp < NOW() - INTERVAL '5 seconds'
@@ -227,24 +228,23 @@ BEGIN
     END IF;
 
     -- ============================================================
-    -- 4. Look for an open (check-in without check-out) record today
+    -- 4. Find today's attendance row (if any)
     -- ============================================================
     SELECT *
       INTO v_attendance
       FROM public.attendance
      WHERE employee_id = p_user_id
        AND date = CURRENT_DATE
-       AND check_out IS NULL
      ORDER BY check_in DESC
      LIMIT 1;
 
     -- ============================================================
-    -- 5a. NO open record → CHECK-IN
+    -- 5a. Row does NOT exist → FIRST CHECK-IN today
     -- ============================================================
     IF NOT FOUND THEN
+        v_is_first_checkin := true;
         v_check_in := NOW();
 
-        -- Determine status: 'late' if after shift start, else 'present'
         IF v_check_in::TIME > c_shift_start THEN
             v_status := 'late';
         ELSE
@@ -262,80 +262,107 @@ BEGIN
             'action',         'check_in',
             'attendance_id',  v_attendance.id,
             'status',         v_status,
-            'check_in',       v_check_in
+            'check_in',       v_check_in,
+            'session',        1
         );
     END IF;
 
     -- ============================================================
-    -- 5b. Open record exists → CHECK-OUT
+    -- 5b. Row exists with check_out IS NULL → CHECK-OUT
     -- ============================================================
-    v_check_in   := v_attendance.check_in;
-    v_check_out  := NOW();
+    IF v_attendance.check_out IS NULL THEN
+        v_check_in  := v_attendance.check_in;
+        v_check_out := NOW();
 
-    -- Total hours worked (up to 2 decimal places)
-    v_total_hours := ROUND(
-        EXTRACT(EPOCH FROM (v_check_out - v_check_in)) / 3600.0,
-        2
-    );
+        -- Minutes worked in this session
+        v_session_minutes := ROUND(
+            EXTRACT(EPOCH FROM (v_check_out - v_check_in)) / 60.0,
+            2
+        );
 
-    -- Overtime / penalty calculation
-    IF v_total_hours > v_profile.required_hours THEN
-        v_overtime_min := ROUND(
-            (v_total_hours - v_profile.required_hours) * 60, 0
-        )::NUMERIC(6, 0);
-        v_penalty_min  := 0;
-    ELSIF v_total_hours < v_profile.required_hours THEN
-        v_overtime_min := 0;
-        v_penalty_min  := ROUND(
-            (v_profile.required_hours - v_total_hours) * 60, 0
-        )::NUMERIC(6, 0);
-    ELSE
-        v_overtime_min := 0;
-        v_penalty_min  := 0;
+        -- Accumulated minutes = previous accumulated + this session
+        v_accumulated := COALESCE(v_attendance.accumulated_minutes, 0) + v_session_minutes;
+        v_total_hours := ROUND(v_accumulated / 60.0, 2);
+
+        -- Financial constants
+        v_daily_rate    := COALESCE(v_profile.monthly_salary, 0) / 30.0;
+        v_minutely_rate := v_daily_rate / (v_profile.required_hours * 60.0);
+
+        -- Calculate penalty / overtime based on TOTAL accumulated minutes
+        IF v_total_hours >= v_profile.required_hours THEN
+            -- Employee met or exceeded requirement → overtime only
+            v_overtime_min := ROUND((v_total_hours - v_profile.required_hours) * 60, 0)::NUMERIC(6,0);
+            v_penalty_min  := 0;
+            v_overtime_amount := ROUND(v_overtime_min * v_minutely_rate);
+            v_penalty_amount  := 0;
+        ELSE
+            -- Employee is short → penalty (no overtime)
+            v_overtime_min    := 0;
+            v_overtime_amount := 0;
+            v_penalty_min := ROUND((v_profile.required_hours * 60 - v_accumulated), 0)::NUMERIC(6,0);
+            -- Financial penalty = missing_minutes * minutely_rate, capped at daily_rate
+            v_penalty_amount := LEAST(
+                ROUND(v_penalty_min * v_minutely_rate),
+                ROUND(v_daily_rate)
+            );
+        END IF;
+
+        -- Status: penalty > 0 means early checkout
+        IF v_penalty_min > 0 THEN
+            v_status := 'early_checkout';
+        ELSE
+            v_status := v_attendance.status;
+        END IF;
+
+        -- Update the existing daily row
+        UPDATE public.attendance
+           SET check_out           = v_check_out,
+               accumulated_minutes = v_accumulated,
+               total_hours         = v_total_hours,
+               overtime_minutes    = v_overtime_min,
+               penalty_minutes     = v_penalty_min,
+               penalty_amount      = v_penalty_amount,
+               overtime_amount     = v_overtime_amount,
+               status              = v_status
+         WHERE id = v_attendance.id;
+
+        RETURN jsonb_build_object(
+            'success',           true,
+            'action',            'check_out',
+            'attendance_id',     v_attendance.id,
+            'accumulated_min',   v_accumulated,
+            'total_hours',       v_total_hours,
+            'overtime_minutes',  v_overtime_min,
+            'penalty_minutes',   v_penalty_min,
+            'penalty_amount',    v_penalty_amount,
+            'overtime_amount',   v_overtime_amount,
+            'status',            v_status,
+            'check_in',          v_check_in,
+            'check_out',         v_check_out
+        );
     END IF;
 
-    -- Financial calculation:
-    -- daily_rate = monthly_salary / 30
-    -- minutely_rate = daily_rate / (required_hours * 60)
-    -- penalty_amount = penalty_minutes * minutely_rate
-    -- overtime_amount = overtime_minutes * minutely_rate
-    v_daily_rate    := COALESCE(v_profile.monthly_salary, 0) / 30.0;
-    v_minutely_rate := v_daily_rate / (v_profile.required_hours * 60.0);
-    v_penalty_amount  := ROUND(COALESCE(v_penalty_min, 0) * v_minutely_rate);
-    v_overtime_amount := ROUND(COALESCE(v_overtime_min, 0) * v_minutely_rate);
+    -- ============================================================
+    -- 5c. Row exists with check_out IS NOT NULL → RE-CHECK-IN
+    -- ============================================================
+    -- Start a new session in the same daily row
+    v_check_in := NOW();
 
-    -- Final status:
-    --   If left before completing required_hours → 'early_checkout'
-    --   Otherwise keep whatever check-in status was ('late' or 'present')
-    IF v_penalty_min > 0 THEN
-        v_status := 'early_checkout';
-    ELSE
-        v_status := v_attendance.status;
-    END IF;
+    -- Keep the original check-in status (don't change to 'late' for re-entries)
+    v_status := v_attendance.status;
 
-    -- Update the attendance row
     UPDATE public.attendance
-       SET check_out        = v_check_out,
-           total_hours      = v_total_hours,
-           overtime_minutes = v_overtime_min,
-           penalty_minutes  = v_penalty_min,
-           penalty_amount   = v_penalty_amount,
-           overtime_amount  = v_overtime_amount,
-           status           = v_status
+       SET check_in  = v_check_in,
+           check_out = NULL
      WHERE id = v_attendance.id;
 
     RETURN jsonb_build_object(
-        'success',          true,
-        'action',           'check_out',
-        'attendance_id',    v_attendance.id,
-        'total_hours',      v_total_hours,
-        'overtime_minutes', v_overtime_min,
-        'penalty_minutes',  v_penalty_min,
-        'penalty_amount',   v_penalty_amount,
-        'overtime_amount',  v_overtime_amount,
-        'status',           v_status,
-        'check_in',         v_check_in,
-        'check_out',        v_check_out
+        'success',        true,
+        'action',         'check_in',
+        'attendance_id',  v_attendance.id,
+        'status',         v_status,
+        'check_in',       v_check_in,
+        'session',        2
     );
 
 EXCEPTION
