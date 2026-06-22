@@ -90,26 +90,29 @@ export default function LoginPage() {
         <div style={{ ...styles.shape, ...styles.shape3 }} />
       </div>
 
-      <div className="login-grid" style={styles.grid}>
-        {/* Left Column — QR Code */}
-        <div className="login-qr-col" style={styles.qrCol}>
+      <div className="login-grid" dir="ltr" style={styles.grid}>
+        {/* Left Side — QR Code */}
+        <div style={styles.col}>
           <div style={styles.qrCard}>
-            <div style={styles.qrIcon}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
-              </svg>
-            </div>
-            <h2 style={styles.qrTitle}>امسح رمز QR لتسجيل الحضور</h2>
-            <p style={styles.qrSub}>استخدم تطبيق الموظف لمسح الرمز الظاهر أدناه</p>
-            <div style={styles.qrFrame}>
-              <canvas ref={canvasRef} style={styles.canvas} />
-              <div style={styles.qrGlow} />
+            <div style={styles.qrBody}>
+              <div style={styles.qrIcon}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+                </svg>
+              </div>
+              <h2 style={styles.qrTitle}>امسح رمز QR<br />لتسجيل الحضور</h2>
+              <p style={styles.qrSub}>استخدم تطبيق الموظف لمسح الرمز الظاهر أدناه</p>
+              <div style={styles.qrFrame}>
+                <canvas ref={canvasRef} style={styles.canvas} />
+                <div style={styles.qrGlow} />
+              </div>
             </div>
             <div style={styles.qrFooter}>
               <div style={styles.qrFooterRow}>
                 <span style={styles.qrFooterLabel}>الرمز</span>
                 <span dir="ltr" style={styles.qrFooterValue}>{payload.token ? payload.token.slice(0, 8) + '...' : '—'}</span>
               </div>
+              <div style={styles.qrFooterDivider} />
               <div style={styles.qrFooterRow}>
                 <span style={styles.qrFooterLabel}>التحديث</span>
                 <span dir="ltr" style={styles.qrFooterValue}>كل 5 ثوان</span>
@@ -118,8 +121,8 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Right Column — Login Form */}
-        <div className="login-form-col" style={styles.formCol}>
+        {/* Right Side — Login Form */}
+        <div style={styles.col}>
           <div style={styles.card}>
             <div style={styles.cardInner}>
               <div style={styles.header}>
@@ -180,7 +183,7 @@ export default function LoginPage() {
         @media (min-width: 900px) {
           .login-grid {
             grid-template-columns: 1fr 1fr !important;
-            max-width: 900px !important;
+            max-width: 960px !important;
             gap: 32px !important;
           }
         }
@@ -198,7 +201,7 @@ const styles = {
     background: 'linear-gradient(135deg, #e8e0f5 0%, #f0f0f8 50%, #f5f5f7 100%)',
     position: 'relative',
     overflow: 'hidden',
-    fontFamily: 'var(--font-sans)',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
     padding: '24px',
   },
   backgroundShapes: {
@@ -240,25 +243,32 @@ const styles = {
     gap: '24px',
     width: '100%',
     maxWidth: '500px',
-    alignItems: 'center',
+    alignItems: 'stretch',
+  },
+  col: {
+    display: 'flex',
   },
 
-  // --- QR Column ---
-  qrCol: {
-    order: 1,
-  },
+  // --- QR Card ---
   qrCard: {
-    background: 'rgba(255,255,255,0.75)',
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    background: 'rgba(255,255,255,0.80)',
     backdropFilter: 'blur(24px) saturate(180%)',
     WebkitBackdropFilter: 'blur(24px) saturate(180%)',
     borderRadius: '24px',
     border: '1px solid rgba(255,255,255,0.4)',
     boxShadow: '0 32px 72px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)',
-    padding: '32px',
+    padding: '40px 32px 28px',
+  },
+  qrBody: {
+    flex: 1,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    textAlign: 'center',
+    justifyContent: 'center',
   },
   qrIcon: {
     width: '52px',
@@ -268,18 +278,23 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: '16px',
+    marginBottom: '18px',
   },
   qrTitle: {
-    fontSize: '18px',
+    fontSize: '19px',
     fontWeight: 700,
     color: '#1d1d1f',
-    marginBottom: '6px',
+    textAlign: 'center',
+    lineHeight: 1.4,
+    marginBottom: '8px',
   },
   qrSub: {
     fontSize: '13px',
     color: '#6e6e73',
-    marginBottom: '24px',
+    textAlign: 'center',
+    marginBottom: '28px',
+    maxWidth: '240px',
+    lineHeight: 1.5,
   },
   qrFrame: {
     position: 'relative',
@@ -288,12 +303,11 @@ const styles = {
     borderRadius: '24px',
     border: '1px solid rgba(0,0,0,0.06)',
     boxShadow: '0 16px 48px rgba(0,0,0,0.06)',
-    marginBottom: '20px',
   },
   canvas: {
     display: 'block',
-    width: '280px',
-    height: '280px',
+    width: '260px',
+    height: '260px',
     maxWidth: '100%',
     maxHeight: '100%',
     borderRadius: '16px',
@@ -308,7 +322,9 @@ const styles = {
   },
   qrFooter: {
     display: 'flex',
-    gap: '24px',
+    alignItems: 'center',
+    gap: '16px',
+    marginTop: '24px',
     padding: '12px 20px',
     background: 'rgba(0,0,0,0.02)',
     borderRadius: '12px',
@@ -320,6 +336,11 @@ const styles = {
     flexDirection: 'column',
     gap: '2px',
     alignItems: 'center',
+  },
+  qrFooterDivider: {
+    width: '1px',
+    height: '28px',
+    background: 'rgba(0,0,0,0.06)',
   },
   qrFooterLabel: {
     fontSize: '9px',
@@ -334,22 +355,24 @@ const styles = {
     color: '#6e6e73',
   },
 
-  // --- Form Column ---
-  formCol: {
-    order: 2,
-  },
+  // --- Form Card ---
   card: {
-    position: 'relative',
-    width: '100%',
-    background: 'rgba(255, 255, 255, 0.75)',
+    flex: 1,
+    background: 'rgba(255,255,255,0.80)',
     backdropFilter: 'blur(24px) saturate(180%)',
     WebkitBackdropFilter: 'blur(24px) saturate(180%)',
     borderRadius: '24px',
-    border: '1px solid rgba(255, 255, 255, 0.4)',
-    boxShadow: '0 32px 72px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+    border: '1px solid rgba(255,255,255,0.4)',
+    boxShadow: '0 32px 72px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)',
+    display: 'flex',
+    flexDirection: 'column',
   },
   cardInner: {
-    padding: '48px 40px 40px',
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    padding: '48px 40px 44px',
   },
   header: {
     textAlign: 'center',
@@ -406,6 +429,7 @@ const styles = {
     transition: 'border-color 0.2s, box-shadow 0.2s',
     fontFamily: 'inherit',
     boxSizing: 'border-box',
+    direction: 'rtl',
   },
   button: {
     width: '100%',
