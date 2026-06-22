@@ -513,8 +513,12 @@ export default function AdminDashboard() {
     const allDays = Math.floor((new Date(today) - new Date(monthStart)) / msPerDay) + 1
     const absenceDays = Math.max(0, allDays - attendanceDays)
     const monthlySalary = emp.monthly_salary || 0
+    const requiredHours = emp.required_hours || 8
     const dailySalary = Math.round(monthlySalary / 30)
-    return { attendanceDays, absenceDays, monthlySalary, dailySalary }
+    const totalOvertime = records.reduce((sum, r) => sum + calcOvertimeAmount(r.overtime_minutes, monthlySalary, requiredHours), 0)
+    const totalDeductions = records.reduce((sum, r) => sum + calcPenaltyAmount(r.penalty_minutes, monthlySalary, requiredHours), 0)
+    const netPayable = monthlySalary + totalOvertime - totalDeductions
+    return { attendanceDays, absenceDays, monthlySalary, dailySalary, totalOvertime, totalDeductions, netPayable }
   }
 
   if (loading) {
@@ -1008,7 +1012,7 @@ export default function AdminDashboard() {
 
               {/* Summary Cards */}
               <div style={{
-                display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 28,
+                display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 28,
               }}>
                 <div style={s.statCard}>
                   <p style={s.statLabel}>أيام الحضور</p>
@@ -1025,6 +1029,10 @@ export default function AdminDashboard() {
                 <div style={s.statCard}>
                   <p style={s.statLabel}>الراتب اليومي</p>
                   <p style={{ ...s.statValue, fontSize: 18 }} dir="ltr">{iqd(stats.dailySalary)}</p>
+                </div>
+                <div style={{ ...s.statCard, background: 'linear-gradient(135deg, rgba(124,58,237,0.06), rgba(59,130,246,0.06))', border: '1px solid rgba(124,58,237,0.15)' }}>
+                  <p style={{ ...s.statLabel, color: '#7c3aed' }}>الراتب المستحق</p>
+                  <p style={{ ...s.statValue, fontSize: 18, color: '#7c3aed' }} dir="ltr">{iqd(stats.netPayable)}</p>
                 </div>
               </div>
 
