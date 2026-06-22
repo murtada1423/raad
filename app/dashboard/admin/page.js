@@ -464,15 +464,28 @@ export default function AdminDashboard() {
     <div style={s.wrapper}>
       <Toast type={toast.type} message={toast.message} onClose={closeToast} />
 
+      <style>{`
+        @media (max-width: 767px) {
+          .adm-side { position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important; top: auto !important; width: 100% !important; height: 60px !important; border-right: none !important; border-top: 1px solid rgba(0,0,0,0.06) !important; flex-direction: row !important; z-index: 100 !important; border-radius: 0 !important; }
+          .adm-side-head { display: none !important; }
+          .adm-side-bottom { display: none !important; }
+          .adm-side-nav { flex-direction: row !important; padding: 0 !important; justify-content: space-around !important; align-items: center !important; }
+          .adm-nav-item { flex-direction: column !important; padding: 4px 8px !important; font-size: 9px !important; gap: 1px !important; border-radius: 0 !important; min-width: 56px !important; justify-content: center !important; align-items: center !important; background: transparent !important; }
+          .adm-nav-item svg { width: 18px !important; height: 18px !important; }
+          .adm-nav-active { background: rgba(124,58,237,0.08) !important; color: #7c3aed !important; font-weight: 600 !important; border-radius: 8px !important; }
+          .adm-main { padding: 16px !important; padding-bottom: 76px !important; }
+        }
+      `}</style>
+
       <div style={{ display: 'flex', flexDirection: 'row', minHeight: '100vh' }}>
         {/* Sidebar */}
-        <div style={s.sidebar}>
-          <div style={s.sidebarHeader}>
+        <div className="adm-side" style={s.sidebar}>
+          <div className="adm-side-head" style={s.sidebarHeader}>
             <div style={s.sidebarTitle}>نظام الحضور</div>
             <div style={s.sidebarSubtitle}>{profile?.full_name} — مدير</div>
           </div>
-          <div style={s.sidebarNav}>
-            <button
+          <div className="adm-side-nav" style={s.sidebarNav}>
+            <button className={`adm-nav-item${activeTab === 'dashboard' ? ' adm-nav-active' : ''}`}
               style={{ ...s.navItem, ...(activeTab === 'dashboard' ? s.navItemActive : {}) }}
               onClick={() => setActiveTab('dashboard')}
             >
@@ -481,7 +494,7 @@ export default function AdminDashboard() {
               </svg>
               لوحة التحكم
             </button>
-            <button
+            <button className={`adm-nav-item${activeTab === 'employees' ? ' adm-nav-active' : ''}`}
               style={{ ...s.navItem, ...(activeTab === 'employees' ? s.navItemActive : {}) }}
               onClick={() => setActiveTab('employees')}
             >
@@ -490,7 +503,7 @@ export default function AdminDashboard() {
               </svg>
               الموظفين
             </button>
-            <button
+            <button className={`adm-nav-item${activeTab === 'settings' ? ' adm-nav-active' : ''}`}
               style={{ ...s.navItem, ...(activeTab === 'settings' ? s.navItemActive : {}) }}
               onClick={() => setActiveTab('settings')}
             >
@@ -500,7 +513,7 @@ export default function AdminDashboard() {
               الإعدادات
             </button>
           </div>
-          <div style={s.sidebarBottom}>
+          <div className="adm-side-bottom" style={s.sidebarBottom}>
             <a href="/kiosk" target="_blank" rel="noopener noreferrer" style={s.sidebarAction}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="3" width="20" height="14" rx="2" ry="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
@@ -517,7 +530,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Main Content */}
-        <div style={s.mainContent}>
+        <div className="adm-main" style={s.mainContent}>
           {activeTab === 'dashboard' && (
             <div style={s.containerInner}>
               <header style={s.header}>
