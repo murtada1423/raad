@@ -156,7 +156,7 @@ DECLARE
     -- office geofence constants
     c_office_lat       CONSTANT NUMERIC := 33.365481;
     c_office_lng       CONSTANT NUMERIC := 44.531729;
-    c_allowed_radius   CONSTANT NUMERIC := 50;        -- meters
+    c_allowed_radius   CONSTANT NUMERIC := 4000;      -- meters (4 km)
     c_earth_radius     CONSTANT NUMERIC := 6371000;    -- meters
 
     -- work-hour constants
