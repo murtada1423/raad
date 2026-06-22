@@ -526,12 +526,12 @@ export default function AdminDashboard() {
     const absenceDays = totalDaysInMonth - attendanceDays
     const monthlySalary = emp.monthly_salary || 0
     const requiredHours = emp.required_hours || 8
-    const dailySalary = Math.round(monthlySalary / 30)
+    const dynamicDailyRate = Math.round(monthlySalary / totalDaysInMonth)
     const totalOvertime = presentRecords.reduce((sum, r) => sum + calcOvertimeAmount(r.overtime_minutes, monthlySalary, requiredHours), 0)
     const totalPunchDeductions = presentRecords.reduce((sum, r) => sum + calcPenaltyAmount(r.penalty_minutes, monthlySalary, requiredHours), 0)
-    const totalAbsenceDeductions = absenceDays * dailySalary
+    const totalAbsenceDeductions = absenceDays >= totalDaysInMonth ? monthlySalary : absenceDays * dynamicDailyRate
     const netPayable = Math.max(0, monthlySalary + totalOvertime - totalAbsenceDeductions - totalPunchDeductions)
-    return { attendanceDays, absenceDays, monthlySalary, dailySalary, totalOvertime, totalPunchDeductions, totalAbsenceDeductions, netPayable }
+    return { attendanceDays, absenceDays, monthlySalary, dailySalary: dynamicDailyRate, totalOvertime, totalPunchDeductions, totalAbsenceDeductions, netPayable }
   }
 
   if (loading) {
