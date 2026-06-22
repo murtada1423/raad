@@ -41,7 +41,7 @@ export default function LoginPage() {
     }
 
     generate()
-    timeoutId = setInterval(generate, 5000)
+    timeoutId = setInterval(generate, 30000)
     return () => { mounted = false; clearInterval(timeoutId) }
   }, [])
 
@@ -115,7 +115,7 @@ export default function LoginPage() {
               <div style={styles.qrFooterDivider} />
               <div style={styles.qrFooterRow}>
                 <span style={styles.qrFooterLabel}>التحديث</span>
-                <span dir="ltr" style={styles.qrFooterValue}>كل 5 ثوان</span>
+                <span dir="ltr" style={styles.qrFooterValue}>كل 30 ثانية</span>
               </div>
             </div>
           </div>
