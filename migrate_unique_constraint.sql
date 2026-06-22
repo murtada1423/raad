@@ -218,20 +218,8 @@ BEGIN
         );
     END IF;
 
-    -- (7c) RE-CHECK-IN
-    v_check_in := NOW();
-    v_status   := v_attendance.status;
-
-    UPDATE public.attendance
-       SET check_in = v_check_in, check_out = NULL
-     WHERE id = v_attendance.id;
-
-    RETURN jsonb_build_object(
-        'success', true, 'action', 'check_in',
-        'attendance_id', v_attendance.id,
-        'status', v_status,
-        'check_in', v_check_in
-    );
+    -- (7c) Both check_in and check_out exist → REJECT (strict two-step toggle)
+    RETURN jsonb_build_object('success', false, 'error', 'Attendance already completed for today — no further scans allowed');
 
 EXCEPTION
     WHEN OTHERS THEN

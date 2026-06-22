@@ -148,6 +148,7 @@ export default function AdminDashboard() {
   const [officeRadius, setOfficeRadius] = useState('4000')
   const [savingGeo, setSavingGeo] = useState(false)
   const [loadingGeo, setLoadingGeo] = useState(true)
+  const [showGeoSettings, setShowGeoSettings] = useState(false)
 
   const router = useRouter()
   const supabase = createClient()
@@ -533,40 +534,51 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Office Location Settings */}
-        <div style={s.section}>
-          <div style={s.sectionHeader}>
+        {/* Office Location Settings — collapsible */}
+        <div style={{ ...s.section, padding: showGeoSettings ? undefined : '14px 20px', transition: 'padding 0.2s' }}>
+          <div
+            onClick={() => setShowGeoSettings((v) => !v)}
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', userSelect: 'none' }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" />
               </svg>
-              <h2 style={s.sectionTitle}>إعدادات الموقع الجغرافي للمكتب</h2>
+              <span style={{ fontSize: 14, fontWeight: 600, color: '#1d1d1f' }}>⚙️ إعدادات الموقع</span>
             </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aeaeb2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              style={{ transform: showGeoSettings ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
           </div>
-          {loadingGeo ? (
-            <div style={s.emptyState}><p>جاري تحميل الإعدادات...</p></div>
-          ) : (
+          {showGeoSettings && (
             <>
-              <div style={s.geoForm}>
-                <div style={s.inputGroup}>
-                  <label style={s.label}>خط العرض (Latitude)</label>
-                  <input type="number" value={officeLat} onChange={(e) => setOfficeLat(e.target.value)}
-                    style={s.input} step="any" dir="ltr" />
+              {loadingGeo ? (
+                <div style={{ ...s.emptyState, paddingTop: 24 }}><p>جاري تحميل الإعدادات...</p></div>
+              ) : (
+                <div style={{ marginTop: 20 }}>
+                  <div style={s.geoForm}>
+                    <div style={s.inputGroup}>
+                      <label style={s.label}>خط العرض (Latitude)</label>
+                      <input type="number" value={officeLat} onChange={(e) => setOfficeLat(e.target.value)}
+                        style={s.input} step="any" dir="ltr" />
+                    </div>
+                    <div style={s.inputGroup}>
+                      <label style={s.label}>خط الطول (Longitude)</label>
+                      <input type="number" value={officeLng} onChange={(e) => setOfficeLng(e.target.value)}
+                        style={s.input} step="any" dir="ltr" />
+                    </div>
+                    <div style={s.inputGroup}>
+                      <label style={s.label}>المدى الجغرافي المسموح به (متر)</label>
+                      <input type="number" value={officeRadius} onChange={(e) => setOfficeRadius(e.target.value)}
+                        style={s.input} min="1" step="1" dir="ltr" />
+                    </div>
+                  </div>
+                  <button style={{ ...s.saveBtn, marginTop: 20 }} onClick={handleSaveGeo} disabled={savingGeo}>
+                    {savingGeo ? 'جاري الحفظ...' : 'حفظ الإعدادات الجغرافية'}
+                  </button>
                 </div>
-                <div style={s.inputGroup}>
-                  <label style={s.label}>خط الطول (Longitude)</label>
-                  <input type="number" value={officeLng} onChange={(e) => setOfficeLng(e.target.value)}
-                    style={s.input} step="any" dir="ltr" />
-                </div>
-                <div style={s.inputGroup}>
-                  <label style={s.label}>المدى الجغرافي المسموح به (متر)</label>
-                  <input type="number" value={officeRadius} onChange={(e) => setOfficeRadius(e.target.value)}
-                    style={s.input} min="1" step="1" dir="ltr" />
-                </div>
-              </div>
-              <button style={{ ...s.saveBtn, marginTop: 20 }} onClick={handleSaveGeo} disabled={savingGeo}>
-                {savingGeo ? 'جاري الحفظ...' : 'حفظ الإعدادات الجغرافية'}
-              </button>
+              )}
             </>
           )}
         </div>
