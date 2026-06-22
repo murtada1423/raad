@@ -849,6 +849,7 @@ const s = {
     color: '#aeaeb2',
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
+    textAlign: 'right',
   },
   tableRow: {
     display: 'grid',
@@ -869,11 +870,13 @@ const s = {
   td: {
     fontSize: 13,
     color: '#6e6e73',
+    textAlign: 'right',
   },
   tdName: {
     fontSize: 13,
     fontWeight: 500,
     color: '#1d1d1f',
+    textAlign: 'right',
   },
   tdAction: {
     textAlign: 'right',

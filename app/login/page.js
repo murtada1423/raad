@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
@@ -11,6 +11,39 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+
+  const [payload, setPayload] = useState({ token: '', timestamp: '' })
+  const canvasRef = useRef(null)
+
+  useEffect(() => {
+    let mounted = true
+    let timeoutId
+
+    async function generate() {
+      const token = crypto.randomUUID()
+      const timestamp = new Date().toISOString()
+      const json = JSON.stringify({ token, timestamp })
+      if (!mounted) return
+
+      const QRCode = (await import('qrcode')).default
+      if (!mounted) return
+
+      QRCode.toCanvas(canvasRef.current, json, {
+        width: 280,
+        margin: 1,
+        scale: 6,
+        color: { dark: '#1d1d1f', light: '#ffffff' },
+      }).then(() => {
+        if (mounted) {
+          setPayload({ token, timestamp })
+        }
+      })
+    }
+
+    generate()
+    timeoutId = setInterval(generate, 5000)
+    return () => { mounted = false; clearInterval(timeoutId) }
+  }, [])
 
   async function handleSignIn(e) {
     e.preventDefault()
@@ -57,59 +90,101 @@ export default function LoginPage() {
         <div style={{ ...styles.shape, ...styles.shape3 }} />
       </div>
 
-      <div style={styles.card}>
-        <div style={styles.cardInner}>
-          <div style={styles.header}>
-            <div style={styles.logo}>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M20 21a8 8 0 1 0-16 0" />
+      <div className="login-grid" style={styles.grid}>
+        {/* Left Column — QR Code */}
+        <div className="login-qr-col" style={styles.qrCol}>
+          <div style={styles.qrCard}>
+            <div style={styles.qrIcon}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
               </svg>
             </div>
-            <h1 style={styles.title}>الحضور والرواتب</h1>
-            <p style={styles.subtitle}>تسجيل الدخول إلى حسابك</p>
+            <h2 style={styles.qrTitle}>امسح رمز QR لتسجيل الحضور</h2>
+            <p style={styles.qrSub}>استخدم تطبيق الموظف لمسح الرمز الظاهر أدناه</p>
+            <div style={styles.qrFrame}>
+              <canvas ref={canvasRef} style={styles.canvas} />
+              <div style={styles.qrGlow} />
+            </div>
+            <div style={styles.qrFooter}>
+              <div style={styles.qrFooterRow}>
+                <span style={styles.qrFooterLabel}>الرمز</span>
+                <span dir="ltr" style={styles.qrFooterValue}>{payload.token ? payload.token.slice(0, 8) + '...' : '—'}</span>
+              </div>
+              <div style={styles.qrFooterRow}>
+                <span style={styles.qrFooterLabel}>التحديث</span>
+                <span dir="ltr" style={styles.qrFooterValue}>كل 5 ثوان</span>
+              </div>
+            </div>
           </div>
+        </div>
 
-          <form onSubmit={handleSignIn} style={styles.form}>
-            <div style={styles.inputGroup}>
-              <label style={styles.label} htmlFor="email">البريد الإلكتروني</label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="أدخل البريد الإلكتروني"
-                style={styles.input}
-                autoComplete="email"
-                required
-              />
+        {/* Right Column — Login Form */}
+        <div className="login-form-col" style={styles.formCol}>
+          <div style={styles.card}>
+            <div style={styles.cardInner}>
+              <div style={styles.header}>
+                <div style={styles.logo}>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M20 21a8 8 0 1 0-16 0" />
+                  </svg>
+                </div>
+                <h1 style={styles.title}>الحضور والرواتب</h1>
+                <p style={styles.subtitle}>تسجيل الدخول إلى حسابك</p>
+              </div>
+
+              <form onSubmit={handleSignIn} style={styles.form}>
+                <div style={styles.inputGroup}>
+                  <label style={styles.label} htmlFor="email">البريد الإلكتروني</label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="أدخل البريد الإلكتروني"
+                    style={styles.input}
+                    autoComplete="email"
+                    required
+                  />
+                </div>
+
+                <div style={styles.inputGroup}>
+                  <label style={styles.label} htmlFor="password">كلمة المرور</label>
+                  <input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="أدخل كلمة المرور"
+                    style={styles.input}
+                    autoComplete="current-password"
+                    required
+                  />
+                </div>
+
+                {error && <p style={styles.error}>{error}</p>}
+
+                <button type="submit" disabled={loading} style={{
+                  ...styles.button,
+                  opacity: loading ? 0.7 : 1,
+                }}>
+                  {loading ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
+                </button>
+              </form>
             </div>
-
-            <div style={styles.inputGroup}>
-              <label style={styles.label} htmlFor="password">كلمة المرور</label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="أدخل كلمة المرور"
-                style={styles.input}
-                autoComplete="current-password"
-                required
-              />
-            </div>
-
-            {error && <p style={styles.error}>{error}</p>}
-
-            <button type="submit" disabled={loading} style={{
-              ...styles.button,
-              opacity: loading ? 0.7 : 1,
-            }}>
-              {loading ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
-            </button>
-          </form>
+          </div>
         </div>
       </div>
+
+      <style>{`
+        @media (min-width: 900px) {
+          .login-grid {
+            grid-template-columns: 1fr 1fr !important;
+            max-width: 900px !important;
+            gap: 32px !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }
@@ -124,6 +199,7 @@ const styles = {
     position: 'relative',
     overflow: 'hidden',
     fontFamily: 'var(--font-sans)',
+    padding: '24px',
   },
   backgroundShapes: {
     position: 'absolute',
@@ -157,11 +233,114 @@ const styles = {
     top: '40%',
     left: '60%',
   },
+  grid: {
+    position: 'relative',
+    display: 'grid',
+    gridTemplateColumns: '1fr',
+    gap: '24px',
+    width: '100%',
+    maxWidth: '500px',
+    alignItems: 'center',
+  },
+
+  // --- QR Column ---
+  qrCol: {
+    order: 1,
+  },
+  qrCard: {
+    background: 'rgba(255,255,255,0.75)',
+    backdropFilter: 'blur(24px) saturate(180%)',
+    WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+    borderRadius: '24px',
+    border: '1px solid rgba(255,255,255,0.4)',
+    boxShadow: '0 32px 72px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)',
+    padding: '32px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    textAlign: 'center',
+  },
+  qrIcon: {
+    width: '52px',
+    height: '52px',
+    borderRadius: '16px',
+    background: 'rgba(124,58,237,0.1)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: '16px',
+  },
+  qrTitle: {
+    fontSize: '18px',
+    fontWeight: 700,
+    color: '#1d1d1f',
+    marginBottom: '6px',
+  },
+  qrSub: {
+    fontSize: '13px',
+    color: '#6e6e73',
+    marginBottom: '24px',
+  },
+  qrFrame: {
+    position: 'relative',
+    padding: '12px',
+    background: '#ffffff',
+    borderRadius: '24px',
+    border: '1px solid rgba(0,0,0,0.06)',
+    boxShadow: '0 16px 48px rgba(0,0,0,0.06)',
+    marginBottom: '20px',
+  },
+  canvas: {
+    display: 'block',
+    width: '280px',
+    height: '280px',
+    maxWidth: '100%',
+    maxHeight: '100%',
+    borderRadius: '16px',
+  },
+  qrGlow: {
+    position: 'absolute',
+    inset: '-4px',
+    borderRadius: '28px',
+    background: 'linear-gradient(135deg, rgba(124,58,237,0.1), rgba(59,130,246,0.1))',
+    filter: 'blur(12px)',
+    zIndex: -1,
+  },
+  qrFooter: {
+    display: 'flex',
+    gap: '24px',
+    padding: '12px 20px',
+    background: 'rgba(0,0,0,0.02)',
+    borderRadius: '12px',
+    width: '100%',
+    justifyContent: 'center',
+  },
+  qrFooterRow: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    alignItems: 'center',
+  },
+  qrFooterLabel: {
+    fontSize: '9px',
+    fontWeight: 600,
+    color: '#aeaeb2',
+    textTransform: 'uppercase',
+    letterSpacing: '1px',
+  },
+  qrFooterValue: {
+    fontSize: '12px',
+    fontWeight: 500,
+    color: '#6e6e73',
+  },
+
+  // --- Form Column ---
+  formCol: {
+    order: 2,
+  },
   card: {
     position: 'relative',
     width: '100%',
-    maxWidth: '420px',
-    margin: '0 16px',
     background: 'rgba(255, 255, 255, 0.75)',
     backdropFilter: 'blur(24px) saturate(180%)',
     WebkitBackdropFilter: 'blur(24px) saturate(180%)',
