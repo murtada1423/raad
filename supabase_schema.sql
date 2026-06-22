@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS public.attendance (
     total_hours      NUMERIC(6, 2),
     overtime_minutes NUMERIC(6, 0) NOT NULL DEFAULT 0,
     penalty_minutes  NUMERIC(6, 0) NOT NULL DEFAULT 0,
+    penalty_amount   NUMERIC(10, 0) NOT NULL DEFAULT 0,
+    overtime_amount  NUMERIC(10, 0) NOT NULL DEFAULT 0,
     status           TEXT NOT NULL CHECK (status IN ('present', 'late', 'early_checkout'))
 );
 
@@ -171,6 +173,10 @@ DECLARE
     v_total_hours       NUMERIC(6, 2);
     v_overtime_min      NUMERIC(6, 0);
     v_penalty_min       NUMERIC(6, 0);
+    v_daily_rate        NUMERIC(10, 2);
+    v_minutely_rate     NUMERIC(10, 6);
+    v_penalty_amount    NUMERIC(10, 0);
+    v_overtime_amount   NUMERIC(10, 0);
     v_check_in          TIMESTAMPTZ;
     v_check_out         TIMESTAMPTZ;
 BEGIN
@@ -208,7 +214,7 @@ BEGIN
     -- ============================================================
     -- 3. Fetch employee profile
     -- ============================================================
-    SELECT id, role, required_hours
+    SELECT id, role, required_hours, monthly_salary
       INTO v_profile
       FROM public.profiles
      WHERE id = p_user_id;
@@ -288,6 +294,16 @@ BEGIN
         v_penalty_min  := 0;
     END IF;
 
+    -- Financial calculation:
+    -- daily_rate = monthly_salary / 30
+    -- minutely_rate = daily_rate / (required_hours * 60)
+    -- penalty_amount = penalty_minutes * minutely_rate
+    -- overtime_amount = overtime_minutes * minutely_rate
+    v_daily_rate    := COALESCE(v_profile.monthly_salary, 0) / 30.0;
+    v_minutely_rate := v_daily_rate / (v_profile.required_hours * 60.0);
+    v_penalty_amount  := ROUND(COALESCE(v_penalty_min, 0) * v_minutely_rate);
+    v_overtime_amount := ROUND(COALESCE(v_overtime_min, 0) * v_minutely_rate);
+
     -- Final status:
     --   If left before completing required_hours → 'early_checkout'
     --   Otherwise keep whatever check-in status was ('late' or 'present')
@@ -303,6 +319,8 @@ BEGIN
            total_hours      = v_total_hours,
            overtime_minutes = v_overtime_min,
            penalty_minutes  = v_penalty_min,
+           penalty_amount   = v_penalty_amount,
+           overtime_amount  = v_overtime_amount,
            status           = v_status
      WHERE id = v_attendance.id;
 
@@ -313,6 +331,8 @@ BEGIN
         'total_hours',      v_total_hours,
         'overtime_minutes', v_overtime_min,
         'penalty_minutes',  v_penalty_min,
+        'penalty_amount',   v_penalty_amount,
+        'overtime_amount',  v_overtime_amount,
         'status',           v_status,
         'check_in',         v_check_in,
         'check_out',        v_check_out

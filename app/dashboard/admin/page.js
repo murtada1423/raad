@@ -133,6 +133,7 @@ export default function AdminDashboard() {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState({ type: '', message: '' })
   const [profilesMap, setProfilesMap] = useState({})
+  const [employeeSalaryMap, setEmployeeSalaryMap] = useState({})
   const [showAddModal, setShowAddModal] = useState(false)
   const [addName, setAddName] = useState('')
   const [addEmail, setAddEmail] = useState('')
@@ -162,6 +163,22 @@ export default function AdminDashboard() {
     return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   }
 
+  const dailyRate = (salary, hours) => salary / 30
+  const hourlyRate = (salary, hours) => dailyRate(salary, hours) / hours
+  const minutelyRate = (salary, hours) => hourlyRate(salary, hours) / 60
+
+  const calcPenaltyAmount = (penaltyMinutes, salary, requiredHours) => {
+    if (!penaltyMinutes || penaltyMinutes <= 0) return 0
+    return Math.round(penaltyMinutes * minutelyRate(salary, requiredHours))
+  }
+
+  const calcOvertimeAmount = (overtimeMinutes, salary, requiredHours) => {
+    if (!overtimeMinutes || overtimeMinutes <= 0) return 0
+    return Math.round(overtimeMinutes * minutelyRate(salary, requiredHours))
+  }
+
+  const getEmployeePay = (employeeId) => employeeSalaryMap[employeeId] || { monthly_salary: 0, required_hours: 8 }
+
   const statusDisplay = (a) => {
     const statusMap = { present: 'حاضر', late: 'متأخر', early_checkout: 'مغادرة مبكرة', absent: 'غائب' }
     return a.check_out ? `${statusMap[a.status] || a.status} (تم)` : statusMap[a.status] || a.status
@@ -180,21 +197,37 @@ export default function AdminDashboard() {
       ? new Set(todayAttendance.map((a) => a.employee_id)).size
       : 0
 
-    const overtimeThisMonth = monthAttendance
-      ? monthAttendance.reduce((sum, a) => sum + (parseInt(a.overtime_minutes) || 0), 0)
+    const empList = employees || []
+
+    const overtimeAmtThisMonth = monthAttendance
+      ? monthAttendance.reduce((sum, a) => {
+          const pay = empList.find((e) => e.id === a.employee_id)
+          const sal = pay?.monthly_salary || 0
+          const hrs = pay?.required_hours || 8
+          return sum + calcOvertimeAmount(a.overtime_minutes, sal, hrs)
+        }, 0)
       : 0
 
-    const penaltiesThisMonth = monthAttendance
-      ? monthAttendance.reduce((sum, a) => sum + (parseInt(a.penalty_minutes) || 0), 0)
+    const penaltiesAmtThisMonth = monthAttendance
+      ? monthAttendance.reduce((sum, a) => {
+          const pay = empList.find((e) => e.id === a.employee_id)
+          const sal = pay?.monthly_salary || 0
+          const hrs = pay?.required_hours || 8
+          return sum + calcPenaltyAmount(a.penalty_minutes, sal, hrs)
+        }, 0)
       : 0
 
-    setStats({ totalEmployees: totalEmployees || 0, presentToday, overtimeThisMonth, penaltiesThisMonth })
-    setEmployees(employees || [])
+    setStats({ totalEmployees: totalEmployees || 0, presentToday, overtimeThisMonth: overtimeAmtThisMonth, penaltiesThisMonth: penaltiesAmtThisMonth })
+    setEmployees(empList)
     setAttendanceList(todayAttendance || [])
 
     const map = {}
     ;(allProfiles || []).forEach((p) => { map[p.id] = p.full_name })
     setProfilesMap(map)
+
+    const payMap = {}
+    empList.forEach((e) => { payMap[e.id] = { monthly_salary: e.monthly_salary, required_hours: e.required_hours } })
+    setEmployeeSalaryMap(payMap)
   }
 
   useEffect(() => {
@@ -502,11 +535,15 @@ export default function AdminDashboard() {
                   <span style={s.th}>دخول</span>
                   <span style={s.th}>خروج</span>
                   <span style={s.th}>ساعات</span>
-                  <span style={s.th}>إضافي</span>
-                  <span style={s.th}>خصم</span>
+                  <span style={s.th}>إضافي (د.ع)</span>
+                  <span style={s.th}>خصم (د.ع)</span>
                   <span style={s.th}>الحالة</span>
                 </div>
-                {orderedAttendance.map((a) => {
+                  {orderedAttendance.map((a) => {
+                  const pay = getEmployeePay(a.employee_id)
+                  const penAmt = calcPenaltyAmount(a.penalty_minutes, pay.monthly_salary, pay.required_hours)
+                  const overAmt = calcOvertimeAmount(a.overtime_minutes, pay.monthly_salary, pay.required_hours)
+
                   const statusColor =
                     a.status === 'present' ? '#34c759' :
                     a.status === 'late' ? '#cc9a00' :
@@ -524,11 +561,11 @@ export default function AdminDashboard() {
                       <span style={s.td}>{new Date(a.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
                       <span style={s.td}>{a.check_out ? new Date(a.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
                       <span style={s.td}>{a.total_hours ? `${a.total_hours.toFixed(1)}س` : '—'}</span>
-                      <span style={{ ...s.td, color: parseInt(a.overtime_minutes) > 0 ? '#34c759' : '#aeaeb2' }}>
-                        {parseInt(a.overtime_minutes) > 0 ? `${a.overtime_minutes}د` : '—'}
+                      <span style={{ ...s.td, color: overAmt > 0 ? '#34c759' : '#aeaeb2' }}>
+                        {overAmt > 0 ? iqd(overAmt) : '—'}
                       </span>
-                      <span style={{ ...s.td, color: parseInt(a.penalty_minutes) > 0 ? '#ff453a' : '#aeaeb2' }}>
-                        {parseInt(a.penalty_minutes) > 0 ? `${a.penalty_minutes}د` : '—'}
+                      <span style={{ ...s.td, color: penAmt > 0 ? '#ff453a' : '#aeaeb2' }}>
+                        {penAmt > 0 ? iqd(penAmt) : '—'}
                       </span>
                       <span>
                         <span style={{ ...s.badge, background: badgeBg, color: statusColor }}>
