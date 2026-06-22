@@ -34,7 +34,7 @@ export default function KioskPage() {
     }
 
     generate()
-    timeoutId = setInterval(generate, 5000)
+    timeoutId = setInterval(generate, 30000)
     return () => { mounted = false; clearInterval(timeoutId) }
   }, [])
 
@@ -65,7 +65,7 @@ export default function KioskPage() {
           </div>
           <div style={styles.footerRow}>
             <span style={styles.footerLabel}>التحديث</span>
-            <span dir="ltr" style={styles.footerValue}>كل 5 ثوان</span>
+            <span dir="ltr" style={styles.footerValue}>كل 30 ثانية</span>
           </div>
         </div>
       </div>
