@@ -171,6 +171,8 @@ export default function AdminDashboard() {
   }
   const today = getEffectiveDate()
   const monthStart = getMonthStart()
+  const [curY, curM] = monthStart.split('-').map(Number)
+  const currentMonthDays = new Date(curY, curM, 0).getDate()
 
   const iqd = (value) =>
     new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value) + ' د.ع'
@@ -191,18 +193,19 @@ export default function AdminDashboard() {
     return `${h} ساعة و ${m} دقيقة`
   }
 
-  const dailyRate = (salary, hours) => salary / 30
-  const hourlyRate = (salary, hours) => dailyRate(salary, hours) / hours
-  const minutelyRate = (salary, hours) => hourlyRate(salary, hours) / 60
-
-  const calcPenaltyAmount = (penaltyMinutes, salary, requiredHours) => {
-    if (!penaltyMinutes || penaltyMinutes <= 0) return 0
-    return Math.round(penaltyMinutes * minutelyRate(salary, requiredHours))
+  const dynamicMinuteRate = (salary, totalDaysInMonth, requiredHours) => {
+    const dailyRate = salary / totalDaysInMonth
+    return dailyRate / (requiredHours * 60)
   }
 
-  const calcOvertimeAmount = (overtimeMinutes, salary, requiredHours) => {
+  const calcDeduction = (penaltyMinutes, salary, totalDaysInMonth, requiredHours) => {
+    if (!penaltyMinutes || penaltyMinutes <= 0) return 0
+    return Math.round(penaltyMinutes * dynamicMinuteRate(salary, totalDaysInMonth, requiredHours))
+  }
+
+  const calcAddition = (overtimeMinutes, salary, totalDaysInMonth, requiredHours) => {
     if (!overtimeMinutes || overtimeMinutes <= 0) return 0
-    return Math.round(overtimeMinutes * minutelyRate(salary, requiredHours))
+    return Math.round(overtimeMinutes * dynamicMinuteRate(salary, totalDaysInMonth, requiredHours))
   }
 
   const getEmployeePay = (employeeId) => employeeSalaryMap[employeeId] || { monthly_salary: 0, required_hours: 8 }
@@ -246,7 +249,7 @@ export default function AdminDashboard() {
           const pay = empList.find((e) => e.id === a.employee_id)
           const sal = pay?.monthly_salary || 0
           const hrs = pay?.required_hours || 8
-          return sum + calcOvertimeAmount(a.overtime_minutes, sal, hrs)
+          return sum + calcAddition(a.overtime_minutes, sal, currentMonthDays, hrs)
         }, 0)
       : 0
 
@@ -255,7 +258,7 @@ export default function AdminDashboard() {
           const pay = empList.find((e) => e.id === a.employee_id)
           const sal = pay?.monthly_salary || 0
           const hrs = pay?.required_hours || 8
-          return sum + calcPenaltyAmount(a.penalty_minutes, sal, hrs)
+          return sum + calcDeduction(a.penalty_minutes, sal, currentMonthDays, hrs)
         }, 0)
       : 0
 
@@ -526,12 +529,29 @@ export default function AdminDashboard() {
     const absenceDays = totalDaysInMonth - attendanceDays
     const monthlySalary = emp.monthly_salary || 0
     const requiredHours = emp.required_hours || 8
-    const dynamicDailyRate = Math.round(monthlySalary / totalDaysInMonth)
-    const totalOvertime = presentRecords.reduce((sum, r) => sum + calcOvertimeAmount(r.overtime_minutes, monthlySalary, requiredHours), 0)
-    const totalPunchDeductions = presentRecords.reduce((sum, r) => sum + calcPenaltyAmount(r.penalty_minutes, monthlySalary, requiredHours), 0)
-    const totalAbsenceDeductions = absenceDays >= totalDaysInMonth ? monthlySalary : absenceDays * dynamicDailyRate
-    const netPayable = Math.max(0, monthlySalary + totalOvertime - totalAbsenceDeductions - totalPunchDeductions)
-    return { attendanceDays, absenceDays, monthlySalary, dailySalary: dynamicDailyRate, totalOvertime, totalPunchDeductions, totalAbsenceDeductions, netPayable }
+    const dynamicDailyRate = monthlySalary / totalDaysInMonth
+    const requiredMinutes = requiredHours * 60
+    const minuteRate = dynamicDailyRate / requiredMinutes
+
+    let totalAdditions = 0
+    let totalDeductions = 0
+
+    for (const r of presentRecords) {
+      const totalMinutes = r.total_hours ? Math.round(r.total_hours * 60) : 0
+      if (totalMinutes < requiredMinutes) {
+        const missingMinutes = requiredMinutes - totalMinutes
+        totalDeductions += Math.round(missingMinutes * minuteRate)
+      } else if (totalMinutes > requiredMinutes) {
+        const extraMinutes = totalMinutes - requiredMinutes
+        totalAdditions += Math.round(extraMinutes * minuteRate)
+      }
+    }
+
+    const netPayable = attendanceDays === 0
+      ? 0
+      : Math.max(0, Math.round(dynamicDailyRate * attendanceDays) + totalAdditions - totalDeductions)
+
+    return { attendanceDays, absenceDays, monthlySalary, dailySalary: Math.round(dynamicDailyRate), totalAdditions, totalDeductions, netPayable }
   }
 
   if (loading) {
@@ -687,8 +707,8 @@ export default function AdminDashboard() {
                       </div>
                       {orderedAttendance.map((a) => {
                         const pay = getEmployeePay(a.employee_id)
-                        const penAmt = calcPenaltyAmount(a.penalty_minutes, pay.monthly_salary, pay.required_hours)
-                        const overAmt = calcOvertimeAmount(a.overtime_minutes, pay.monthly_salary, pay.required_hours)
+                        const penAmt = calcDeduction(a.penalty_minutes, pay.monthly_salary, currentMonthDays, pay.required_hours)
+                        const overAmt = calcAddition(a.overtime_minutes, pay.monthly_salary, currentMonthDays, pay.required_hours)
                         const statusColor =
                           a.status === 'present' ? '#34c759' :
                           a.status === 'late' ? '#cc9a00' :
@@ -1081,9 +1101,8 @@ export default function AdminDashboard() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                 <h4 style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f', margin: 0 }}>سجل الحضور الشهري</h4>
                 <div style={{ display: 'flex', gap: 18, fontSize: 12, color: '#6e6e73' }}>
-                  <span>الإضافي: <b style={{ color: '#34c759' }}>{iqd(stats.totalOvertime)}</b></span>
-                  <span>خصم الغياب: <b style={{ color: '#ff453a' }}>{iqd(stats.totalAbsenceDeductions)}</b></span>
-                  <span>خصم التأخير: <b style={{ color: '#ff453a' }}>{iqd(stats.totalPunchDeductions)}</b></span>
+                  <span>الإضافي: <b style={{ color: '#34c759' }}>{iqd(stats.totalAdditions)}</b></span>
+                  <span>خصم التأخير: <b style={{ color: '#ff453a' }}>{iqd(stats.totalDeductions)}</b></span>
                 </div>
               </div>
               {records.length === 0 ? (
@@ -1106,7 +1125,8 @@ export default function AdminDashboard() {
                     </div>
                     {records.map((r) => {
                       const pay = getEmployeePay(r.employee_id)
-                      const penAmt = calcPenaltyAmount(r.penalty_minutes, pay.monthly_salary, pay.required_hours)
+                      const selMonthDays = new Date(viewYear, viewMonth, 0).getDate()
+                      const penAmt = calcDeduction(r.penalty_minutes, pay.monthly_salary, selMonthDays, pay.required_hours)
                       const sColor =
                         r.status === 'present' ? '#34c759' :
                         r.status === 'late' ? '#cc9a00' :

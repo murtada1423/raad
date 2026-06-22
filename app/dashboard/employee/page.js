@@ -269,20 +269,30 @@ export default function EmployeeDashboard() {
   }
 
   const totalDaysInMonth = new Date(viewYear, viewMonth, 0).getDate()
-  const dailyRate = profile ? Math.round(profile.monthly_salary / totalDaysInMonth) : 0
+  const monthlySalary = profile?.monthly_salary || 0
+  const reqHours = profile?.required_hours || 8
+  const dynamicDailyRate = monthlySalary / totalDaysInMonth
+  const dailyRate = Math.round(dynamicDailyRate)
+  const requiredMinutes = reqHours * 60
+  const minuteRate = dynamicDailyRate / requiredMinutes
+
   const hasAttendance = !!(attendance?.check_in)
 
   let hoursWorked = 0
-  let overtimeAmt = 0
-  let penaltyAmt = 0
+  let todayAddition = 0
+  let todayDeduction = 0
   let netEarned = 0
   let todayStatus = 'no record'
 
   if (hasAttendance) {
     hoursWorked = attendance.total_hours || 0
-    overtimeAmt = parseInt(attendance.overtime_amount) || 0
-    penaltyAmt = parseInt(attendance.penalty_amount) || 0
-    netEarned = Math.max(0, dailyRate - penaltyAmt) + overtimeAmt
+    const workedMins = Math.round(hoursWorked * 60)
+    if (workedMins < requiredMinutes) {
+      todayDeduction = Math.round((requiredMinutes - workedMins) * minuteRate)
+    } else if (workedMins > requiredMinutes) {
+      todayAddition = Math.round((workedMins - requiredMinutes) * minuteRate)
+    }
+    netEarned = Math.max(0, Math.round(dynamicDailyRate) + todayAddition - todayDeduction)
     todayStatus = attendance.check_out ? 'Completed' : 'Checked In'
   }
 
@@ -292,16 +302,20 @@ export default function EmployeeDashboard() {
   const presentMonthRecords = monthRecords.filter((r) => r.status !== 'absent')
   const attendanceDays = presentMonthRecords.length
   const absenceDays = totalDaysInMonth - attendanceDays
-  const monthlySalary = profile?.monthly_salary || 0
-  const reqHours = profile?.required_hours || 8
-  const totalOvertime = presentMonthRecords.reduce((s, r) => {
-    return s + (r.overtime_minutes ? Math.round(r.overtime_minutes * (dailyRate / reqHours / 60)) : 0)
-  }, 0)
-  const totalPunchDeductions = presentMonthRecords.reduce((s, r) => {
-    return s + (r.penalty_minutes ? Math.round(r.penalty_minutes * (dailyRate / reqHours / 60)) : 0)
-  }, 0)
-  const totalAbsenceDeductions = absenceDays >= totalDaysInMonth ? monthlySalary : absenceDays * dailyRate
-  const netPayable = Math.max(0, monthlySalary + totalOvertime - totalAbsenceDeductions - totalPunchDeductions)
+
+  let totalAdditions = 0
+  let totalDeductions = 0
+  for (const r of presentMonthRecords) {
+    const mins = r.total_hours ? Math.round(r.total_hours * 60) : 0
+    if (mins < requiredMinutes) {
+      totalDeductions += Math.round((requiredMinutes - mins) * minuteRate)
+    } else if (mins > requiredMinutes) {
+      totalAdditions += Math.round((mins - requiredMinutes) * minuteRate)
+    }
+  }
+  const netPayable = attendanceDays === 0
+    ? 0
+    : Math.max(0, Math.round(dynamicDailyRate * attendanceDays) + totalAdditions - totalDeductions)
 
   if (loading) {
     return (
@@ -386,14 +400,14 @@ export default function EmployeeDashboard() {
           </div>
           <div style={styles.statCard}>
             <p style={styles.statLabel}>الإضافي</p>
-            <p style={{ ...styles.statValue, color: overtimeAmt > 0 ? '#34c759' : '#aeaeb2' }}>
-              {hasAttendance ? <span dir="ltr">{iqd(overtimeAmt)}</span> : '—'}
+            <p style={{ ...styles.statValue, color: todayAddition > 0 ? '#34c759' : '#aeaeb2' }}>
+              {hasAttendance ? <span dir="ltr">{iqd(todayAddition)}</span> : '—'}
             </p>
           </div>
           <div style={styles.statCard}>
             <p style={styles.statLabel}>الخصومات</p>
-            <p style={{ ...styles.statValue, color: penaltyAmt > 0 ? '#ff453a' : '#aeaeb2' }}>
-              {hasAttendance ? <span dir="ltr">{iqd(penaltyAmt)}</span> : '—'}
+            <p style={{ ...styles.statValue, color: todayDeduction > 0 ? '#ff453a' : '#aeaeb2' }}>
+              {hasAttendance ? <span dir="ltr">{iqd(todayDeduction)}</span> : '—'}
             </p>
           </div>
         </div>
@@ -448,15 +462,11 @@ export default function EmployeeDashboard() {
             </div>
             <div style={styles.payRow}>
               <span style={styles.payLabel}>الإضافي</span>
-              <span style={{ ...styles.payValue, color: '#34c759' }}>{iqd(totalOvertime)}</span>
-            </div>
-            <div style={styles.payRow}>
-              <span style={styles.payLabel}>خصم الغياب</span>
-              <span style={{ ...styles.payValue, color: '#ff453a' }}>{iqd(totalAbsenceDeductions)}</span>
+              <span style={{ ...styles.payValue, color: '#34c759' }}>{iqd(totalAdditions)}</span>
             </div>
             <div style={styles.payRow}>
               <span style={styles.payLabel}>خصم التأخير</span>
-              <span style={{ ...styles.payValue, color: '#ff453a' }}>{iqd(totalPunchDeductions)}</span>
+              <span style={{ ...styles.payValue, color: '#ff453a' }}>{iqd(totalDeductions)}</span>
             </div>
             <div style={{ ...styles.payRow, borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: 12, marginTop: 4 }}>
               <span style={{ ...styles.payLabel, fontWeight: 700, fontSize: 15, color: '#7c3aed' }}>الراتب المستحق للشهر المحدد</span>
