@@ -162,7 +162,7 @@ export default function AdminDashboard() {
 
   const getEffectiveDate = () => {
     const d = new Date()
-    if (d.getHours() < 4) d.setDate(d.getDate() - 1)
+    if (d.getUTCHours() < 4) d.setUTCDate(d.getUTCDate() - 1)
     return d.toISOString().slice(0, 10)
   }
   const getMonthStart = () => {
@@ -479,9 +479,9 @@ export default function AdminDashboard() {
 
   async function syncAbsences() {
     const now = new Date()
-    if (now.getHours() < 4) return
+    if (now.getUTCHours() < 4) return
     const yesterday = new Date(now)
-    yesterday.setDate(yesterday.getDate() - 1)
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1)
     const yesterdayStr = yesterday.toISOString().slice(0, 10)
     const { data: existing } = await supabase
       .from('attendance')

@@ -74,7 +74,7 @@ export default function EmployeeDashboard() {
 
   const getEffectiveDate = () => {
     const d = new Date()
-    if (d.getHours() < 4) d.setDate(d.getDate() - 1)
+    if (d.getUTCHours() < 4) d.setUTCDate(d.getUTCDate() - 1)
     return d.toISOString().slice(0, 10)
   }
 
