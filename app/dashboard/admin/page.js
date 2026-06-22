@@ -520,17 +520,17 @@ export default function AdminDashboard() {
 
   const getEmployeeStatsForMonth = (emp, month, year) => {
     const records = getEmployeeMonthRecords(emp.id, month, year)
-    const absentRecords = records.filter((a) => a.status === 'absent')
     const presentRecords = records.filter((a) => a.status !== 'absent')
     const attendanceDays = presentRecords.length
-    const absenceDays = absentRecords.length
+    const totalDaysInMonth = new Date(year, month, 0).getDate()
+    const absenceDays = totalDaysInMonth - attendanceDays
     const monthlySalary = emp.monthly_salary || 0
     const requiredHours = emp.required_hours || 8
     const dailySalary = Math.round(monthlySalary / 30)
     const totalOvertime = presentRecords.reduce((sum, r) => sum + calcOvertimeAmount(r.overtime_minutes, monthlySalary, requiredHours), 0)
     const totalPunchDeductions = presentRecords.reduce((sum, r) => sum + calcPenaltyAmount(r.penalty_minutes, monthlySalary, requiredHours), 0)
     const totalAbsenceDeductions = absenceDays * dailySalary
-    const netPayable = monthlySalary + totalOvertime - totalAbsenceDeductions - totalPunchDeductions
+    const netPayable = Math.max(0, monthlySalary + totalOvertime - totalAbsenceDeductions - totalPunchDeductions)
     return { attendanceDays, absenceDays, monthlySalary, dailySalary, totalOvertime, totalPunchDeductions, totalAbsenceDeductions, netPayable }
   }
 
@@ -998,14 +998,12 @@ export default function AdminDashboard() {
         const stats = getEmployeeStatsForMonth(emp, viewMonth, viewYear)
         const records = getEmployeeMonthRecords(emp.id, viewMonth, viewYear)
         const months = [
-          { val: 1, label: 'يناير' }, { val: 2, label: 'فبراير' }, { val: 3, label: 'مارس' },
-          { val: 4, label: 'أبريل' }, { val: 5, label: 'مايو' }, { val: 6, label: 'يونيو' },
-          { val: 7, label: 'يوليو' }, { val: 8, label: 'أغسطس' }, { val: 9, label: 'سبتمبر' },
-          { val: 10, label: 'أكتوبر' }, { val: 11, label: 'نوفمبر' }, { val: 12, label: 'ديسمبر' },
+          { val: 1, label: '01' }, { val: 2, label: '02' }, { val: 3, label: '03' },
+          { val: 4, label: '04' }, { val: 5, label: '05' }, { val: 6, label: '06' },
+          { val: 7, label: '07' }, { val: 8, label: '08' }, { val: 9, label: '09' },
+          { val: 10, label: '10' }, { val: 11, label: '11' }, { val: 12, label: '12' },
         ]
-        const years = []
-        const curYear = new Date().getFullYear()
-        for (let y = curYear - 2; y <= curYear + 1; y++) years.push(y)
+        const years = [2026, 2027, 2028, 2029, 2030]
         const selectStyle = {
           padding: '8px 12px', fontSize: 13, fontWeight: 600,
           color: '#1d1d1f', background: 'rgba(0,0,0,0.03)',
