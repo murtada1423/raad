@@ -466,17 +466,19 @@ export default function AdminDashboard() {
   async function handleDeleteEmployee() {
     if (!deleteTarget) return
     setDeleting(true)
-    const { error } = await supabase
-      .from('profiles')
-      .delete()
-      .eq('id', deleteTarget.id)
+    const res = await fetch('/api/delete-employee', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: deleteTarget.id }),
+    })
+    const data = await res.json()
 
-    if (error) {
-      showToast('error', error.message || 'فشل حذف الموظف')
-    } else {
+    if (res.ok) {
       showToast('success', `تم حذف ${deleteTarget.full_name}`)
       setEmployees((prev) => prev.filter((e) => e.id !== deleteTarget.id))
       setDeleteTarget(null)
+    } else {
+      showToast('error', data.error || 'فشل حذف الموظف')
     }
     setDeleting(false)
   }
