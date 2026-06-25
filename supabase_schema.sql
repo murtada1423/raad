@@ -246,7 +246,7 @@ BEGIN
     -- 1. Validate QR timestamp
     -- ============================================================
     IF p_qr_timestamp IS NULL
-       OR p_qr_timestamp < NOW() - INTERVAL '5 seconds'
+       OR p_qr_timestamp < NOW() - INTERVAL '30 seconds'
        OR p_qr_timestamp > NOW() + INTERVAL '1 second'
     THEN
         RETURN jsonb_build_object(

@@ -13,6 +13,7 @@ export default function LoginPage() {
   const supabase = createClient()
 
   const [payload, setPayload] = useState({ token: '', timestamp: '' })
+  const [countdown, setCountdown] = useState(30)
   const canvasRef = useRef(null)
 
   useEffect(() => {
@@ -43,6 +44,18 @@ export default function LoginPage() {
     generate()
     timeoutId = setInterval(generate, 30000)
     return () => { mounted = false; clearInterval(timeoutId) }
+  }, [])
+
+  // Countdown timer
+  useEffect(() => {
+    setCountdown(30)
+  }, [payload])
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setCountdown((c) => Math.max(0, c - 1))
+    }, 1000)
+    return () => clearInterval(id)
   }, [])
 
   async function handleSignIn(e) {
@@ -116,6 +129,11 @@ export default function LoginPage() {
               <div style={styles.qrFooterRow}>
                 <span style={styles.qrFooterLabel}>التحديث</span>
                 <span dir="ltr" style={styles.qrFooterValue}>كل 30 ثانية</span>
+              </div>
+              <div style={styles.qrFooterDivider} />
+              <div style={styles.qrFooterRow}>
+                <span style={styles.qrFooterLabel}>العد التنازلي</span>
+                <span dir="ltr" style={{ ...styles.qrFooterValue, color: countdown <= 5 ? '#ff453a' : '#1d1d1f', fontWeight: 700, fontSize: 15 }}>{countdown} ث</span>
               </div>
             </div>
           </div>

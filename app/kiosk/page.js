@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 export default function KioskPage() {
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [payload, setPayload] = useState({ token: '', timestamp: '' })
+  const [countdown, setCountdown] = useState(30)
   const canvasRef = useRef(null)
 
   useEffect(() => {
@@ -38,6 +39,18 @@ export default function KioskPage() {
     return () => { mounted = false; clearInterval(timeoutId) }
   }, [])
 
+  // Countdown timer
+  useEffect(() => {
+    setCountdown(30)
+  }, [payload])
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setCountdown((c) => Math.max(0, c - 1))
+    }, 1000)
+    return () => clearInterval(id)
+  }, [])
+
   return (
     <div style={styles.container}>
       <div style={styles.orb1} />
@@ -66,6 +79,10 @@ export default function KioskPage() {
           <div style={styles.footerRow}>
             <span style={styles.footerLabel}>التحديث</span>
             <span dir="ltr" style={styles.footerValue}>كل 30 ثانية</span>
+          </div>
+          <div style={styles.footerRow}>
+            <span style={styles.footerLabel}>العد التنازلي</span>
+            <span dir="ltr" style={{ ...styles.footerValue, color: countdown <= 5 ? '#ff453a' : '#1d1d1f', fontWeight: 700, fontSize: 18 }}>{countdown} ث</span>
           </div>
         </div>
       </div>
