@@ -78,10 +78,6 @@ export default function KioskPage() {
           </div>
           <div style={styles.footerRow}>
             <span style={styles.footerLabel}>التحديث</span>
-            <span dir="ltr" style={styles.footerValue}>كل 30 ثانية</span>
-          </div>
-          <div style={styles.footerRow}>
-            <span style={styles.footerLabel}>العد التنازلي</span>
             <span dir="ltr" style={{ ...styles.footerValue, color: countdown <= 5 ? '#ff453a' : '#1d1d1f', fontWeight: 700, fontSize: 18 }}>{countdown} ث</span>
           </div>
         </div>

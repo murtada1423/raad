@@ -128,11 +128,6 @@ export default function LoginPage() {
               <div style={styles.qrFooterDivider} />
               <div style={styles.qrFooterRow}>
                 <span style={styles.qrFooterLabel}>التحديث</span>
-                <span dir="ltr" style={styles.qrFooterValue}>كل 30 ثانية</span>
-              </div>
-              <div style={styles.qrFooterDivider} />
-              <div style={styles.qrFooterRow}>
-                <span style={styles.qrFooterLabel}>العد التنازلي</span>
                 <span dir="ltr" style={{ ...styles.qrFooterValue, color: countdown <= 5 ? '#ff453a' : '#1d1d1f', fontWeight: 700, fontSize: 15 }}>{countdown} ث</span>
               </div>
             </div>
