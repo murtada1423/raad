@@ -104,8 +104,8 @@ export default function LoginPage() {
       </div>
 
       <div className="login-grid" dir="ltr" style={styles.grid}>
-        {/* Left Side — QR Code */}
-        <div style={styles.col}>
+        {/* Left Side — QR Code (hidden on mobile) */}
+        <div className="login-qr-col" style={styles.col}>
           <div style={styles.qrCard}>
             <div style={styles.qrBody}>
               <div style={styles.qrIcon}>
@@ -193,6 +193,11 @@ export default function LoginPage() {
       </div>
 
       <style>{`
+        @media (max-width: 899px) {
+          .login-qr-col {
+            display: none !important;
+          }
+        }
         @media (min-width: 900px) {
           .login-grid {
             grid-template-columns: 1fr 1fr !important;
