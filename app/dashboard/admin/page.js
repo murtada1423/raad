@@ -140,6 +140,7 @@ export default function AdminDashboard() {
   const [addPassword, setAddPassword] = useState('')
   const [addSalary, setAddSalary] = useState('450000')
   const [addHours, setAddHours] = useState('8')
+  const [addCheckIn, setAddCheckIn] = useState('09:00')
   const [adding, setAdding] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
@@ -442,6 +443,7 @@ export default function AdminDashboard() {
           full_name: addName.trim(),
           monthly_salary: parseFloat(addSalary) || 450000,
           required_hours: parseFloat(addHours) || 8,
+          check_in_time: addCheckIn,
         }),
       })
       const data = await res.json()
@@ -455,6 +457,7 @@ export default function AdminDashboard() {
         setAddPassword('')
         setAddSalary('450000')
         setAddHours('8')
+        setAddCheckIn('09:00')
         await loadData()
       }
     } catch (err) {
@@ -1017,6 +1020,16 @@ export default function AdminDashboard() {
                   min="1"
                   max="24"
                   step="0.5"
+                  dir="ltr"
+                />
+              </div>
+              <div style={s.inputGroup}>
+                <label style={s.label}>وقت الدخول الرسمي</label>
+                <input
+                  type="time"
+                  value={addCheckIn}
+                  onChange={(e) => setAddCheckIn(e.target.value)}
+                  style={s.input}
                   dir="ltr"
                 />
               </div>

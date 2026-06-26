@@ -65,12 +65,14 @@ CREATE INDEX IF NOT EXISTS idx_attendance_employee_checkout_null
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- All authenticated users can read their own profile
+DROP POLICY IF EXISTS profiles_select_own ON public.profiles;
 CREATE POLICY profiles_select_own
     ON public.profiles
     FOR SELECT
     USING (auth.uid() = id);
 
 -- Admins can read all profiles
+DROP POLICY IF EXISTS profiles_select_admin ON public.profiles;
 CREATE POLICY profiles_select_admin
     ON public.profiles
     FOR SELECT
@@ -79,6 +81,7 @@ CREATE POLICY profiles_select_admin
     ));
 
 -- Only admins can insert / update / delete profiles
+DROP POLICY IF EXISTS profiles_insert_admin ON public.profiles;
 CREATE POLICY profiles_insert_admin
     ON public.profiles
     FOR INSERT
@@ -86,6 +89,7 @@ CREATE POLICY profiles_insert_admin
         SELECT id FROM public.profiles WHERE role = 'admin'
     ));
 
+DROP POLICY IF EXISTS profiles_update_admin ON public.profiles;
 CREATE POLICY profiles_update_admin
     ON public.profiles
     FOR UPDATE
@@ -93,6 +97,7 @@ CREATE POLICY profiles_update_admin
         SELECT id FROM public.profiles WHERE role = 'admin'
     ));
 
+DROP POLICY IF EXISTS profiles_delete_admin ON public.profiles;
 CREATE POLICY profiles_delete_admin
     ON public.profiles
     FOR DELETE
@@ -104,12 +109,14 @@ CREATE POLICY profiles_delete_admin
 ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
 
 -- Employees see only their own attendance
+DROP POLICY IF EXISTS attendance_select_own ON public.attendance;
 CREATE POLICY attendance_select_own
     ON public.attendance
     FOR SELECT
     USING (auth.uid() = employee_id);
 
 -- Admins see all attendance
+DROP POLICY IF EXISTS attendance_select_admin ON public.attendance;
 CREATE POLICY attendance_select_admin
     ON public.attendance
     FOR SELECT
@@ -118,6 +125,7 @@ CREATE POLICY attendance_select_admin
     ));
 
 -- Admins can insert / update / delete any attendance
+DROP POLICY IF EXISTS attendance_insert_admin ON public.attendance;
 CREATE POLICY attendance_insert_admin
     ON public.attendance
     FOR INSERT
@@ -125,6 +133,7 @@ CREATE POLICY attendance_insert_admin
         SELECT id FROM public.profiles WHERE role = 'admin'
     ));
 
+DROP POLICY IF EXISTS attendance_update_admin ON public.attendance;
 CREATE POLICY attendance_update_admin
     ON public.attendance
     FOR UPDATE
@@ -132,6 +141,7 @@ CREATE POLICY attendance_update_admin
         SELECT id FROM public.profiles WHERE role = 'admin'
     ));
 
+DROP POLICY IF EXISTS attendance_delete_admin ON public.attendance;
 CREATE POLICY attendance_delete_admin
     ON public.attendance
     FOR DELETE
@@ -141,6 +151,7 @@ CREATE POLICY attendance_delete_admin
 
 -- Allow the SECURITY DEFINER function to bypass RLS by creating
 -- a policy that lets authenticated users insert their own scan.
+DROP POLICY IF EXISTS attendance_insert_self ON public.attendance;
 CREATE POLICY attendance_insert_self
     ON public.attendance
     FOR INSERT
@@ -150,6 +161,7 @@ CREATE POLICY attendance_insert_self
 ALTER TABLE public.office_settings ENABLE ROW LEVEL SECURITY;
 
 -- Admins can read / write office_settings
+DROP POLICY IF EXISTS office_settings_select_admin ON public.office_settings;
 CREATE POLICY office_settings_select_admin
     ON public.office_settings
     FOR SELECT
@@ -157,6 +169,7 @@ CREATE POLICY office_settings_select_admin
         SELECT id FROM public.profiles WHERE role = 'admin'
     ));
 
+DROP POLICY IF EXISTS office_settings_insert_admin ON public.office_settings;
 CREATE POLICY office_settings_insert_admin
     ON public.office_settings
     FOR INSERT
@@ -164,6 +177,7 @@ CREATE POLICY office_settings_insert_admin
         SELECT id FROM public.profiles WHERE role = 'admin'
     ));
 
+DROP POLICY IF EXISTS office_settings_update_admin ON public.office_settings;
 CREATE POLICY office_settings_update_admin
     ON public.office_settings
     FOR UPDATE
@@ -171,6 +185,7 @@ CREATE POLICY office_settings_update_admin
         SELECT id FROM public.profiles WHERE role = 'admin'
     ));
 
+DROP POLICY IF EXISTS office_settings_delete_admin ON public.office_settings;
 CREATE POLICY office_settings_delete_admin
     ON public.office_settings
     FOR DELETE
@@ -208,9 +223,6 @@ AS $$
 DECLARE
     -- earth radius constant (Haversine formula)
     c_earth_radius     CONSTANT NUMERIC := 6371000;
-
-    -- work-hour constants
-    c_shift_start      CONSTANT TIME := '09:00:00';
 
     -- geofence variables (fetched dynamically from office_settings)
     v_office_lat          NUMERIC;
@@ -291,7 +303,7 @@ BEGIN
     -- ============================================================
     -- 4. Fetch employee profile
     -- ============================================================
-    SELECT id, role, required_hours, monthly_salary
+    SELECT id, role, required_hours, monthly_salary, check_in_time
       INTO v_profile
       FROM public.profiles
      WHERE id = p_user_id;
@@ -335,7 +347,7 @@ BEGIN
     IF v_is_new_row THEN
         v_check_in := NOW();
 
-        IF v_check_in::TIME > c_shift_start THEN
+        IF v_check_in::TIME > COALESCE(v_profile.check_in_time::TIME, '09:00:00'::TIME) THEN
             v_status := 'late';
         ELSE
             v_status := 'present';

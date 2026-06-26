@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 
 export async function POST(request) {
   try {
-    const { email, password, full_name, monthly_salary, required_hours } = await request.json()
+    const { email, password, full_name, monthly_salary, required_hours, check_in_time } = await request.json()
 
     if (!email || !password || !full_name) {
       return Response.json({ error: 'Missing required fields' }, { status: 400 })
@@ -31,6 +31,7 @@ export async function POST(request) {
       role: 'employee',
       monthly_salary: monthly_salary || 450000,
       required_hours: required_hours || 8,
+      check_in_time: check_in_time || '09:00',
     })
 
     if (profileError) {

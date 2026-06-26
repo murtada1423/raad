@@ -58,9 +58,6 @@ DECLARE
     -- earth radius constant (Haversine formula)
     c_earth_radius     CONSTANT NUMERIC := 6371000;
 
-    -- work-hour constants
-    c_shift_start      CONSTANT TIME := '09:00:00';
-
     -- geofence variables (fetched dynamically from office_settings)
     v_office_lat          NUMERIC;
     v_office_lng          NUMERIC;
@@ -121,7 +118,7 @@ BEGIN
     END IF;
 
     -- (4) Fetch employee profile
-    SELECT id, role, required_hours, monthly_salary INTO v_profile
+    SELECT id, role, required_hours, monthly_salary, check_in_time INTO v_profile
       FROM public.profiles WHERE id = p_user_id;
 
     IF NOT FOUND THEN
@@ -145,7 +142,7 @@ BEGIN
     -- (7a) FIRST CHECK-IN for this business day
     IF v_is_new_row THEN
         v_check_in := NOW();
-        v_status := CASE WHEN v_check_in::TIME > c_shift_start THEN 'late' ELSE 'present' END;
+        v_status := CASE WHEN v_check_in::TIME > COALESCE(v_profile.check_in_time::TIME, '09:00:00'::TIME) THEN 'late' ELSE 'present' END;
 
         INSERT INTO public.attendance (employee_id, check_in, date, status)
         VALUES (p_user_id, v_check_in, v_effective_date, v_status)
