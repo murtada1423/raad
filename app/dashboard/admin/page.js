@@ -1330,7 +1330,7 @@ export default function AdminDashboard() {
           outline: 'none', fontFamily: 'inherit', cursor: 'pointer',
         }
         return (
-          <div style={s.overlay} onClick={() => setSelectedEmployee(null)}>
+          <div style={{ ...s.overlay, zIndex: 900 }} onClick={() => setSelectedEmployee(null)}>
             <div style={{ ...s.modal, maxWidth: 720, maxHeight: '85vh', overflowY: 'auto', padding: 32 }} onClick={(e) => e.stopPropagation()}>
               {/* Header row: name + net salary badge + back */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
