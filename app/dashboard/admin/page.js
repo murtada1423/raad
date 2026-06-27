@@ -206,6 +206,16 @@ export default function AdminDashboard() {
     return `${h} ساعة و ${m} دقيقة`
   }
 
+  const formatTime = (d) => {
+    if (!d) return '—'
+    const dt = new Date(d)
+    let h = dt.getHours()
+    const m = String(dt.getMinutes()).padStart(2, '0')
+    const ampm = h < 12 ? 'صباحاً' : 'مساءاً'
+    h = h % 12 || 12
+    return `${h}:${m} ${ampm}`
+  }
+
   const computeDailyDeduction = (totalHours, salary, totalDaysInMonth, requiredHours) => {
     if (totalHours == null || totalHours <= 0) return 0
     const totalWorkedMinutes = Math.round(totalHours * 60)
@@ -894,8 +904,8 @@ export default function AdminDashboard() {
                           return (
                             <div key={a.id} style={s.attRow}>
                               <span style={s.tdName}>{profilesMap[a.employee_id] || 'غير معروف'}</span>
-                              <span style={s.td}>{new Date(a.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
-                              <span style={s.td}>{a.check_out ? new Date(a.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                              <span style={s.td}>{formatTime(a.check_in)}</span>
+                              <span style={s.td}>{formatTime(a.check_out)}</span>
                               <span style={s.td}>{a.total_hours ? formatHours(a.total_hours) : '—'}</span>
                               <span style={{ ...s.td, color: overAmt > 0 ? '#34c759' : '#aeaeb2' }}>
                                 {overAmt > 0 ? iqd(overAmt) : '—'}
@@ -1438,8 +1448,8 @@ export default function AdminDashboard() {
                             alignItems: 'center',
                           }}>
                             <span style={s.td}>{r.date}</span>
-                            <span style={s.td}>{r.check_in ? new Date(r.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-                            <span style={s.td}>{r.check_out ? new Date(r.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                            <span style={s.td}>{formatTime(r.check_in)}</span>
+                            <span style={s.td}>{formatTime(r.check_out)}</span>
                             <span style={s.td}>{formatHours(r.total_hours)}</span>
                             <span style={{ ...s.td, color: penAmt > 0 ? '#ff453a' : '#aeaeb2' }}>
                               {penAmt > 0 ? iqd(penAmt) : '—'}
