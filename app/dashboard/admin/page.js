@@ -140,7 +140,15 @@ export default function AdminDashboard() {
   const [addPassword, setAddPassword] = useState('')
   const [addSalary, setAddSalary] = useState('450000')
   const [addHours, setAddHours] = useState('8')
-  const [addCheckIn, setAddCheckIn] = useState('09:00')
+  const [addCheckIn, setAddCheckIn] = useState('16:00')
+  const addCheckOut = (() => {
+    if (!addCheckIn || !addHours) return '00:00'
+    const [h, m] = addCheckIn.split(':').map(Number)
+    const totalMin = h * 60 + m + parseFloat(addHours) * 60
+    const oh = Math.floor(totalMin / 60) % 24
+    const om = totalMin % 60
+    return `${String(oh).padStart(2, '0')}:${String(om).padStart(2, '0')}`
+  })()
   const [adding, setAdding] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
@@ -163,8 +171,8 @@ export default function AdminDashboard() {
   const [showAddAtt, setShowAddAtt] = useState(false)
   const [addAttEmpId, setAddAttEmpId] = useState('')
   const [addAttDate, setAddAttDate] = useState('')
-  const [addAttCheckIn, setAddAttCheckIn] = useState('09:00')
-  const [addAttCheckOut, setAddAttCheckOut] = useState('17:00')
+  const [addAttCheckIn, setAddAttCheckIn] = useState('16:00')
+  const [addAttCheckOut, setAddAttCheckOut] = useState('00:00')
   const [addAttSaving, setAddAttSaving] = useState(false)
   const router = useRouter()
   const supabase = createClient()
@@ -452,6 +460,7 @@ export default function AdminDashboard() {
           monthly_salary: parseFloat(addSalary) || 450000,
           required_hours: parseFloat(addHours) || 8,
           check_in_time: addCheckIn,
+          check_out_time: addCheckOut,
         }),
       })
       const data = await res.json()
@@ -465,7 +474,7 @@ export default function AdminDashboard() {
         setAddPassword('')
         setAddSalary('450000')
         setAddHours('8')
-        setAddCheckIn('09:00')
+        setAddCheckIn('16:00')
         await loadData()
       }
     } catch (err) {
@@ -612,8 +621,8 @@ export default function AdminDashboard() {
       setShowAddAtt(false)
       setAddAttEmpId('')
       setAddAttDate('')
-      setAddAttCheckIn('09:00')
-      setAddAttCheckOut('17:00')
+      setAddAttCheckIn('16:00')
+      setAddAttCheckOut('00:00')
       await loadData()
     }
     setAddAttSaving(false)
@@ -1156,7 +1165,7 @@ export default function AdminDashboard() {
                   style={s.input}
                   min="1"
                   max="24"
-                  step="0.5"
+                  step="1"
                   dir="ltr"
                 />
               </div>
@@ -1168,6 +1177,16 @@ export default function AdminDashboard() {
                   onChange={(e) => setAddCheckIn(e.target.value)}
                   style={s.input}
                   dir="ltr"
+                />
+              </div>
+              <div style={s.inputGroup}>
+                <label style={s.label}>وقت الخروج الرسمي (محسوب تلقائياً)</label>
+                <input
+                  type="time"
+                  value={addCheckOut}
+                  style={{ ...s.input, color: '#aeaeb2' }}
+                  dir="ltr"
+                  readOnly
                 />
               </div>
             </div>
