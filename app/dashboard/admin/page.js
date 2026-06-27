@@ -894,8 +894,8 @@ export default function AdminDashboard() {
                           return (
                             <div key={a.id} style={s.attRow}>
                               <span style={s.tdName}>{profilesMap[a.employee_id] || 'غير معروف'}</span>
-                              <span style={{ ...s.td, fontSize: 11 }}>{new Date(a.check_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + new Date(a.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
-                              <span style={{ ...s.td, fontSize: 11 }}>{a.check_out ? new Date(a.check_out).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + new Date(a.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                              <span style={s.td}>{new Date(a.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
+                              <span style={s.td}>{a.check_out ? new Date(a.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
                               <span style={s.td}>{a.total_hours ? formatHours(a.total_hours) : '—'}</span>
                               <span style={{ ...s.td, color: overAmt > 0 ? '#34c759' : '#aeaeb2' }}>
                                 {overAmt > 0 ? iqd(overAmt) : '—'}
@@ -1437,9 +1437,9 @@ export default function AdminDashboard() {
                             borderBottom: '1px solid rgba(0,0,0,0.04)',
                             alignItems: 'center',
                           }}>
-                            <span style={{ ...s.td, fontSize: 12 }}>{r.date}</span>
-                            <span style={{ ...s.td, fontSize: 11 }}>{r.check_in ? new Date(r.check_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + new Date(r.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-                            <span style={{ ...s.td, fontSize: 11 }}>{r.check_out ? new Date(r.check_out).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + new Date(r.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                            <span style={s.td}>{r.date}</span>
+                            <span style={s.td}>{r.check_in ? new Date(r.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                            <span style={s.td}>{r.check_out ? new Date(r.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
                             <span style={s.td}>{formatHours(r.total_hours)}</span>
                             <span style={{ ...s.td, color: penAmt > 0 ? '#ff453a' : '#aeaeb2' }}>
                               {penAmt > 0 ? iqd(penAmt) : '—'}
