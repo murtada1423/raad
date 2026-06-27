@@ -154,6 +154,18 @@ export default function AdminDashboard() {
   const [monthAttendanceRecords, setMonthAttendanceRecords] = useState([])
   const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1)
   const [viewYear, setViewYear] = useState(new Date().getFullYear())
+  // Manual attendance adjustment
+  const [editAttendance, setEditAttendance] = useState(null)
+  const [editAttCheckIn, setEditAttCheckIn] = useState('')
+  const [editAttCheckOut, setEditAttCheckOut] = useState('')
+  const [attSaving, setAttSaving] = useState(false)
+  const [confirmDeleteAtt, setConfirmDeleteAtt] = useState(null)
+  const [showAddAtt, setShowAddAtt] = useState(false)
+  const [addAttEmpId, setAddAttEmpId] = useState('')
+  const [addAttDate, setAddAttDate] = useState('')
+  const [addAttCheckIn, setAddAttCheckIn] = useState('09:00')
+  const [addAttCheckOut, setAddAttCheckOut] = useState('17:00')
+  const [addAttSaving, setAddAttSaving] = useState(false)
   const router = useRouter()
   const supabase = createClient()
   const channelRef = useRef(null)
@@ -499,6 +511,126 @@ export default function AdminDashboard() {
     router.push('/login')
   }
 
+  function computeAttendanceFromTimes(checkInTime, checkOutTime, emp) {
+    if (!checkInTime || !checkOutTime || !emp) return null
+    const [ciH, ciM] = checkInTime.split(':').map(Number)
+    const [coH, coM] = checkOutTime.split(':').map(Number)
+    const ciTotal = ciH * 60 + ciM
+    const coTotal = coH * 60 + coM
+    let workedMinutes = coTotal - ciTotal
+    if (workedMinutes < 0) workedMinutes += 1440
+    const totalHours = Math.round(workedMinutes * 100 / 60) / 100
+    const requiredMinutes = (emp.required_hours || 8) * 60
+    const penaltyMinutes = workedMinutes < requiredMinutes ? requiredMinutes - workedMinutes : 0
+    const overtimeMinutes = workedMinutes > requiredMinutes ? workedMinutes - requiredMinutes : 0
+    const shiftStart = (emp.check_in_time || '09:00').slice(0, 5)
+    const [ssH, ssM] = shiftStart.split(':').map(Number)
+    const late = ciTotal > (ssH * 60 + ssM)
+    let status
+    if (!checkOutTime) {
+      status = late ? 'late' : 'present'
+    } else if (penaltyMinutes > 0) {
+      status = 'early_checkout'
+    } else if (late) {
+      status = 'late'
+    } else {
+      status = 'present'
+    }
+    return { total_hours: totalHours, penalty_minutes: penaltyMinutes, overtime_minutes: overtimeMinutes, status }
+  }
+
+  async function handleEditAttendanceSave() {
+    if (!editAttendance) return
+    setAttSaving(true)
+    const emp = employees.find((e) => e.id === editAttendance.employee_id)
+    if (!emp) { showToast('error', 'بيانات الموظف غير متوفرة'); setAttSaving(false); return }
+    if (!editAttCheckIn || !editAttCheckOut) { showToast('error', 'يرجى إدخال وقت الدخول والخروج'); setAttSaving(false); return }
+    const computed = computeAttendanceFromTimes(editAttCheckIn, editAttCheckOut, emp)
+    if (!computed) { showToast('error', 'بيانات غير صالحة'); setAttSaving(false); return }
+    const todayDate = editAttendance.date
+    const checkInDt = `${todayDate}T${editAttCheckIn}:00`
+    const checkOutDt = `${todayDate}T${editAttCheckOut}:00`
+    const { error } = await supabase
+      .from('attendance')
+      .update({
+        check_in: checkInDt,
+        check_out: checkOutDt,
+        total_hours: computed.total_hours,
+        penalty_minutes: computed.penalty_minutes,
+        overtime_minutes: computed.overtime_minutes,
+        status: computed.status,
+      })
+      .eq('id', editAttendance.id)
+    if (error) {
+      showToast('error', error.message || 'فشل حفظ التعديل')
+    } else {
+      showToast('success', 'تم تعديل الحضور بنجاح')
+      setEditAttendance(null)
+      await loadData()
+    }
+    setAttSaving(false)
+  }
+
+  async function handleDeleteAttendance() {
+    if (!confirmDeleteAtt) return
+    const id = confirmDeleteAtt.id
+    setConfirmDeleteAtt(null)
+    setAttSaving(true)
+    const { error } = await supabase.from('attendance').delete().eq('id', id)
+    if (error) {
+      showToast('error', error.message || 'فشل حذف السجل')
+    } else {
+      showToast('success', 'تم حذف السجل بنجاح')
+      setEditAttendance(null)
+      await loadData()
+    }
+    setAttSaving(false)
+  }
+
+  async function handleAddAttendance() {
+    if (!addAttEmpId || !addAttDate || !addAttCheckIn || !addAttCheckOut) {
+      showToast('error', 'يرجى اختيار الموظف والتاريخ ووقت الدخول والخروج')
+      return
+    }
+    const emp = employees.find((e) => e.id === addAttEmpId)
+    if (!emp) { showToast('error', 'الموظف غير موجود'); return }
+    const computed = computeAttendanceFromTimes(addAttCheckIn, addAttCheckOut, emp)
+    if (!computed) { showToast('error', 'بيانات غير صالحة'); return }
+    const checkInDt = `${addAttDate}T${addAttCheckIn}:00`
+    const checkOutDt = `${addAttDate}T${addAttCheckOut}:00`
+    setAddAttSaving(true)
+    const { error } = await supabase.from('attendance').insert({
+      employee_id: addAttEmpId,
+      date: addAttDate,
+      check_in: checkInDt,
+      check_out: checkOutDt,
+      total_hours: computed.total_hours,
+      penalty_minutes: computed.penalty_minutes,
+      overtime_minutes: computed.overtime_minutes,
+      status: computed.status,
+    })
+    if (error) {
+      showToast('error', error.message || 'فشل إضافة الحضور')
+    } else {
+      showToast('success', 'تم إضافة الحضور بنجاح')
+      setShowAddAtt(false)
+      setAddAttEmpId('')
+      setAddAttDate('')
+      setAddAttCheckIn('09:00')
+      setAddAttCheckOut('17:00')
+      await loadData()
+    }
+    setAddAttSaving(false)
+  }
+
+  function openAttendanceEdit(record) {
+    const ci = record.check_in ? new Date(record.check_in) : null
+    const co = record.check_out ? new Date(record.check_out) : null
+    setEditAttCheckIn(ci ? `${String(ci.getHours()).padStart(2, '0')}:${String(ci.getMinutes()).padStart(2, '0')}` : '')
+    setEditAttCheckOut(co ? `${String(co.getHours()).padStart(2, '0')}:${String(co.getMinutes()).padStart(2, '0')}` : '')
+    setEditAttendance(record)
+  }
+
   async function syncAbsences() {
     const now = new Date()
     if (now.getUTCHours() < 4) return
@@ -718,61 +850,78 @@ export default function AdminDashboard() {
               <div style={s.section}>
                 <div style={s.sectionHeader}>
                   <h2 style={s.sectionTitle}>الحضور المباشر — اليوم</h2>
-                  <span style={s.liveBadge}>
-                    <span style={s.liveDot} />
-                    مباشر
-                  </span>
-                </div>
-                {orderedAttendance.length === 0 ? (
-                  <div style={s.emptyState}><p>لا توجد سجلات حضور لليوم بعد.</p></div>
-                ) : (
-                  <div style={s.tableResponsive}>
-                    <div style={s.table}>
-                      <div style={s.attHeader}>
-                        <span style={s.th}>الموظف</span>
-                        <span style={s.th}>دخول</span>
-                        <span style={s.th}>خروج</span>
-                        <span style={s.th}>ساعات</span>
-                        <span style={s.th}>إضافي (د.ع)</span>
-                        <span style={s.th}>خصم (د.ع)</span>
-                        <span style={s.th}>الحالة</span>
-                      </div>
-                      {orderedAttendance.map((a) => {
-                        const pay = getEmployeePay(a.employee_id)
-                        const penAmt = computeDailyDeduction(a.total_hours, pay.monthly_salary, currentMonthDays, pay.required_hours)
-                        const overAmt = computeDailyAddition(a.total_hours, pay.monthly_salary, currentMonthDays, pay.required_hours)
-                        const statusColor =
-                          a.status === 'present' ? '#34c759' :
-                          a.status === 'late' ? '#cc9a00' :
-                          a.status === 'early_checkout' ? '#ff453a' : '#aeaeb2'
-                        const badgeBg =
-                          a.status === 'present' ? 'rgba(52,199,89,0.1)' :
-                          a.status === 'late' ? 'rgba(204,154,0,0.1)' :
-                          a.status === 'early_checkout' ? 'rgba(255,69,58,0.1)' :
-                          'rgba(0,0,0,0.04)'
-                        return (
-                          <div key={a.id} style={s.attRow}>
-                            <span style={s.tdName}>{profilesMap[a.employee_id] || 'غير معروف'}</span>
-                            <span style={s.td}>{new Date(a.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
-                            <span style={s.td}>{a.check_out ? new Date(a.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-                            <span style={s.td}>{a.total_hours ? formatHours(a.total_hours) : '—'}</span>
-                            <span style={{ ...s.td, color: overAmt > 0 ? '#34c759' : '#aeaeb2' }}>
-                              {overAmt > 0 ? iqd(overAmt) : '—'}
-                            </span>
-                            <span style={{ ...s.td, color: penAmt > 0 ? '#ff453a' : '#aeaeb2' }}>
-                              {penAmt > 0 ? iqd(penAmt) : '—'}
-                            </span>
-                            <span>
-                              <span style={{ ...s.badge, background: badgeBg, color: statusColor }}>
-                                {statusDisplay(a)}
-                              </span>
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span style={s.liveBadge}>
+                      <span style={s.liveDot} />
+                      مباشر
+                    </span>
+                    <button style={s.addAttBtn} onClick={() => setShowAddAtt(true)}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                      إضافة حضور يدوي
+                    </button>
                   </div>
-                )}
+                </div>
+                  {orderedAttendance.length === 0 ? (
+                    <div style={s.emptyState}><p>لا توجد سجلات حضور لليوم بعد.</p></div>
+                  ) : (
+                    <div style={s.tableResponsive}>
+                      <div style={s.table}>
+                        <div style={s.attHeader}>
+                          <span style={s.th}>الموظف</span>
+                          <span style={s.th}>دخول</span>
+                          <span style={s.th}>خروج</span>
+                          <span style={s.th}>ساعات</span>
+                          <span style={s.th}>إضافي</span>
+                          <span style={s.th}>خصم</span>
+                          <span style={s.th}>الحالة</span>
+                          <span style={{ ...s.th, textAlign: 'center' }}></span>
+                        </div>
+                        {orderedAttendance.map((a) => {
+                          const pay = getEmployeePay(a.employee_id)
+                          const penAmt = computeDailyDeduction(a.total_hours, pay.monthly_salary, currentMonthDays, pay.required_hours)
+                          const overAmt = computeDailyAddition(a.total_hours, pay.monthly_salary, currentMonthDays, pay.required_hours)
+                          const statusColor =
+                            a.status === 'present' ? '#34c759' :
+                            a.status === 'late' ? '#cc9a00' :
+                            a.status === 'early_checkout' ? '#ff453a' : '#aeaeb2'
+                          const badgeBg =
+                            a.status === 'present' ? 'rgba(52,199,89,0.1)' :
+                            a.status === 'late' ? 'rgba(204,154,0,0.1)' :
+                            a.status === 'early_checkout' ? 'rgba(255,69,58,0.1)' :
+                            'rgba(0,0,0,0.04)'
+                          return (
+                            <div key={a.id} style={s.attRow}>
+                              <span style={s.tdName}>{profilesMap[a.employee_id] || 'غير معروف'}</span>
+                              <span style={s.td}>{new Date(a.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
+                              <span style={s.td}>{a.check_out ? new Date(a.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                              <span style={s.td}>{a.total_hours ? formatHours(a.total_hours) : '—'}</span>
+                              <span style={{ ...s.td, color: overAmt > 0 ? '#34c759' : '#aeaeb2' }}>
+                                {overAmt > 0 ? iqd(overAmt) : '—'}
+                              </span>
+                              <span style={{ ...s.td, color: penAmt > 0 ? '#ff453a' : '#aeaeb2' }}>
+                                {penAmt > 0 ? iqd(penAmt) : '—'}
+                              </span>
+                              <span>
+                                <span style={{ ...s.badge, background: badgeBg, color: statusColor }}>
+                                  {statusDisplay(a)}
+                                </span>
+                              </span>
+                              <span style={{ textAlign: 'center' }}>
+                                <button style={s.editIconBtn} onClick={() => openAttendanceEdit(a)} title="تعديل الحضور">
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                  </svg>
+                                </button>
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
               </div>
             </div>
           )}
@@ -1054,6 +1203,107 @@ export default function AdminDashboard() {
         />
       )}
 
+      {/* Manual Attendance Edit Modal */}
+      {editAttendance && (
+        <div style={s.overlay} onClick={() => { if (!attSaving) setEditAttendance(null) }}>
+          <div style={s.modal} onClick={(e) => e.stopPropagation()}>
+            <button style={s.modalClose} onClick={() => { if (!attSaving) setEditAttendance(null) }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <div style={{ ...s.modalIcon, background: 'linear-gradient(135deg, #7c3aed, #3b82f6)' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            </div>
+            <h3 style={s.modalTitle}>تعديل الحضور</h3>
+            <p style={s.modalSub}>{profilesMap[editAttendance.employee_id] || 'موظف'} — {editAttendance.date}</p>
+            <div style={s.modalForm}>
+              <div style={s.inputGroup}>
+                <label style={s.label}>وقت الدخول (check-in)</label>
+                <input type="time" value={editAttCheckIn} onChange={(e) => setEditAttCheckIn(e.target.value)} style={s.input} dir="ltr" />
+              </div>
+              <div style={s.inputGroup}>
+                <label style={s.label}>وقت الخروج (check-out)</label>
+                <input type="time" value={editAttCheckOut} onChange={(e) => setEditAttCheckOut(e.target.value)} style={s.input} dir="ltr" />
+              </div>
+            </div>
+            <div style={s.modalActions}>
+              <button style={s.dangerBtn} onClick={() => setConfirmDeleteAtt(editAttendance)} disabled={attSaving}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+                حذف السجل بالكامل
+              </button>
+              <button style={s.cancelBtn} onClick={() => setEditAttendance(null)} disabled={attSaving}>إلغاء</button>
+              <button style={{ ...s.saveBtn, opacity: attSaving ? 0.7 : 1 }} onClick={handleEditAttendanceSave} disabled={attSaving}>
+                {attSaving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Attendance */}
+      {confirmDeleteAtt && (
+        <ConfirmDialog
+          message={`هل أنت متأكد من حذف سجل الحضور لـ ${profilesMap[confirmDeleteAtt.employee_id] || 'الموظف'} بتاريخ ${confirmDeleteAtt.date}؟`}
+          onConfirm={handleDeleteAttendance}
+          onCancel={() => { if (!attSaving) setConfirmDeleteAtt(null) }}
+        />
+      )}
+
+      {/* Add Manual Attendance Modal */}
+      {showAddAtt && (
+        <div style={s.overlay} onClick={() => { if (!addAttSaving) setShowAddAtt(false) }}>
+          <div style={s.modal} onClick={(e) => e.stopPropagation()}>
+            <button style={s.modalClose} onClick={() => { if (!addAttSaving) setShowAddAtt(false) }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <div style={{ ...s.modalIcon, background: 'linear-gradient(135deg, #34c759, #30d158)' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </div>
+            <h3 style={s.modalTitle}>إضافة حضور يدوي</h3>
+            <p style={s.modalSub}>إنشاء سجل حضور جديد</p>
+            <div style={s.modalForm}>
+              <div style={s.inputGroup}>
+                <label style={s.label}>الموظف</label>
+                <select value={addAttEmpId} onChange={(e) => setAddAttEmpId(e.target.value)} style={s.input}>
+                  <option value="">اختر الموظف...</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>{emp.full_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={s.inputGroup}>
+                <label style={s.label}>التاريخ</label>
+                <input type="date" value={addAttDate} onChange={(e) => setAddAttDate(e.target.value)} style={s.input} dir="ltr" />
+              </div>
+              <div style={s.inputGroup}>
+                <label style={s.label}>وقت الدخول (check-in)</label>
+                <input type="time" value={addAttCheckIn} onChange={(e) => setAddAttCheckIn(e.target.value)} style={s.input} dir="ltr" />
+              </div>
+              <div style={s.inputGroup}>
+                <label style={s.label}>وقت الخروج (check-out)</label>
+                <input type="time" value={addAttCheckOut} onChange={(e) => setAddAttCheckOut(e.target.value)} style={s.input} dir="ltr" />
+              </div>
+            </div>
+            <div style={s.modalActions}>
+              <button style={s.cancelBtn} onClick={() => setShowAddAtt(false)} disabled={addAttSaving}>إلغاء</button>
+              <button style={{ ...s.saveBtn, background: 'linear-gradient(135deg, #34c759, #30d158)', opacity: addAttSaving ? 0.7 : 1 }} onClick={handleAddAttendance} disabled={addAttSaving}>
+                {addAttSaving ? 'جاري الإضافة...' : 'إضافة الحضور'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Employee Detail Modal */}
       {selectedEmployee && (() => {
         const emp = selectedEmployee
@@ -1151,56 +1401,65 @@ export default function AdminDashboard() {
                 <div style={s.emptyState}><p>لا توجد سجلات لهذا الموظف في الشهر المحدد.</p></div>
               ) : (
                 <div style={s.tableResponsive}>
-                  <div style={s.table}>
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 0.8fr 0.8fr 1fr 0.8fr 0.8fr',
-                      gap: 8, padding: '10px 0',
-                      borderBottom: '1px solid rgba(0,0,0,0.06)',
-                    }}>
-                      <span style={s.th}>التاريخ</span>
-                      <span style={s.th}>دخول</span>
-                      <span style={s.th}>خروج</span>
-                      <span style={s.th}>ساعات العمل</span>
-                      <span style={s.th}>الخصم (د.ع)</span>
-                      <span style={s.th}>الحالة</span>
-                    </div>
-                    {records.map((r) => {
-                      const pay = getEmployeePay(r.employee_id)
-                      const selMonthDays = new Date(viewYear, viewMonth, 0).getDate()
-                      const penAmt = computeDailyDeduction(r.total_hours, pay.monthly_salary, selMonthDays, pay.required_hours)
-                      const sColor =
-                        r.status === 'present' ? '#34c759' :
-                        r.status === 'late' ? '#cc9a00' :
-                        r.status === 'early_checkout' ? '#ff453a' : '#aeaeb2'
-                      const bBg =
-                        r.status === 'present' ? 'rgba(52,199,89,0.1)' :
-                        r.status === 'late' ? 'rgba(204,154,0,0.1)' :
-                        r.status === 'early_checkout' ? 'rgba(255,69,58,0.1)' :
-                        'rgba(0,0,0,0.04)'
-                      return (
-                        <div key={r.id} style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 0.8fr 0.8fr 1fr 0.8fr 0.8fr',
-                          gap: 8, padding: '10px 0',
-                          borderBottom: '1px solid rgba(0,0,0,0.04)',
-                          alignItems: 'center',
-                        }}>
-                          <span style={s.td}>{r.date}</span>
-                          <span style={s.td}>{r.check_in ? new Date(r.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-                          <span style={s.td}>{r.check_out ? new Date(r.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-                          <span style={s.td}>{formatHours(r.total_hours)}</span>
-                          <span style={{ ...s.td, color: penAmt > 0 ? '#ff453a' : '#aeaeb2' }}>
-                            {penAmt > 0 ? iqd(penAmt) : '—'}
-                          </span>
-                          <span>
-                            <span style={{ ...s.badge, background: bBg, color: sColor }}>
-                              {statusDisplay(r)}
+                    <div style={s.table}>
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 36px',
+                        gap: 8, padding: '10px 0',
+                        borderBottom: '1px solid rgba(0,0,0,0.06)',
+                      }}>
+                        <span style={s.th}>التاريخ</span>
+                        <span style={s.th}>دخول</span>
+                        <span style={s.th}>خروج</span>
+                        <span style={s.th}>ساعات</span>
+                        <span style={s.th}>الخصم</span>
+                        <span style={s.th}>الحالة</span>
+                        <span style={{ ...s.th, textAlign: 'center' }}></span>
+                      </div>
+                      {records.map((r) => {
+                        const pay = getEmployeePay(r.employee_id)
+                        const selMonthDays = new Date(viewYear, viewMonth, 0).getDate()
+                        const penAmt = computeDailyDeduction(r.total_hours, pay.monthly_salary, selMonthDays, pay.required_hours)
+                        const sColor =
+                          r.status === 'present' ? '#34c759' :
+                          r.status === 'late' ? '#cc9a00' :
+                          r.status === 'early_checkout' ? '#ff453a' : '#aeaeb2'
+                        const bBg =
+                          r.status === 'present' ? 'rgba(52,199,89,0.1)' :
+                          r.status === 'late' ? 'rgba(204,154,0,0.1)' :
+                          r.status === 'early_checkout' ? 'rgba(255,69,58,0.1)' :
+                          'rgba(0,0,0,0.04)'
+                        return (
+                          <div key={r.id} style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 36px',
+                            gap: 8, padding: '10px 0',
+                            borderBottom: '1px solid rgba(0,0,0,0.04)',
+                            alignItems: 'center',
+                          }}>
+                            <span style={s.td}>{r.date}</span>
+                            <span style={s.td}>{r.check_in ? new Date(r.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                            <span style={s.td}>{r.check_out ? new Date(r.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                            <span style={s.td}>{formatHours(r.total_hours)}</span>
+                            <span style={{ ...s.td, color: penAmt > 0 ? '#ff453a' : '#aeaeb2' }}>
+                              {penAmt > 0 ? iqd(penAmt) : '—'}
                             </span>
-                          </span>
-                        </div>
-                      )
-                    })}
+                            <span>
+                              <span style={{ ...s.badge, background: bBg, color: sColor }}>
+                                {statusDisplay(r)}
+                              </span>
+                            </span>
+                            <span style={{ textAlign: 'center' }}>
+                              <button style={s.editIconBtn} onClick={() => openAttendanceEdit(r)} title="تعديل الحضور">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                </svg>
+                              </button>
+                            </span>
+                          </div>
+                        )
+                      })}
                   </div>
                 </div>
               )}
@@ -1373,7 +1632,7 @@ const s = {
   },
   attHeader: {
     display: 'grid',
-    gridTemplateColumns: '1.5fr 0.9fr 0.9fr 0.7fr 0.7fr 0.7fr 0.9fr',
+    gridTemplateColumns: '1.5fr 0.9fr 0.9fr 0.7fr 0.7fr 0.7fr 0.9fr 40px',
     gap: 10,
     padding: '10px 0',
     borderBottom: '1px solid rgba(0,0,0,0.06)',
@@ -1397,7 +1656,7 @@ const s = {
   },
   attRow: {
     display: 'grid',
-    gridTemplateColumns: '1.5fr 0.9fr 0.9fr 0.7fr 0.7fr 0.7fr 0.9fr',
+    gridTemplateColumns: '1.5fr 0.9fr 0.9fr 0.7fr 0.7fr 0.7fr 0.9fr 40px',
     gap: 10,
     padding: '10px 0',
     borderBottom: '1px solid rgba(0,0,0,0.04)',
@@ -1571,6 +1830,51 @@ const s = {
     cursor: 'pointer',
     fontFamily: 'inherit',
     boxShadow: '0 4px 16px rgba(124,58,237,0.25)',
+  },
+  editIconBtn: {
+    width: 30,
+    height: 30,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#aeaeb2',
+    background: 'rgba(0,0,0,0.03)',
+    border: 'none',
+    borderRadius: 8,
+    cursor: 'pointer',
+    transition: 'color 0.15s, background 0.15s',
+  },
+  dangerBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '12px 16px',
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#fff',
+    background: '#ff453a',
+    border: 'none',
+    borderRadius: 10,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: '0 4px 16px rgba(255,69,58,0.25)',
+    whiteSpace: 'nowrap',
+  },
+  addAttBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '8px 14px',
+    fontSize: 12,
+    fontWeight: 600,
+    color: '#fff',
+    background: 'linear-gradient(135deg, #34c759, #30d158)',
+    border: 'none',
+    borderRadius: 8,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: '0 4px 12px rgba(52,199,89,0.2)',
+    whiteSpace: 'nowrap',
   },
   kioskLink: {
     display: 'inline-flex',
