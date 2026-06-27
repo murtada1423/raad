@@ -280,8 +280,18 @@ export default function EmployeeDashboard() {
   const reqHours = profile?.required_hours || 8
   const dynamicDailyRate = monthlySalary / totalDaysInMonth
   const dailyRate = Math.round(dynamicDailyRate)
-  const requiredMinutes = reqHours * 60
-  const minuteRate = dynamicDailyRate / requiredMinutes
+
+  const computeRowPay = (totalHours) => {
+    if (totalHours == null || totalHours <= 0) return { deduction: 0, addition: 0 }
+    const totalWorkedMinutes = Math.round(totalHours * 60)
+    const requiredMinutes = reqHours * 60
+    const minuteRate = dynamicDailyRate / requiredMinutes
+    const netDiff = totalWorkedMinutes - requiredMinutes
+    return {
+      deduction: netDiff < 0 ? Math.round(Math.abs(netDiff) * minuteRate) : 0,
+      addition: netDiff > 0 ? Math.round(netDiff * minuteRate) : 0,
+    }
+  }
 
   const hasAttendance = !!(attendance?.check_in)
 
@@ -293,12 +303,9 @@ export default function EmployeeDashboard() {
 
   if (hasAttendance) {
     hoursWorked = attendance.total_hours || 0
-    const workedMins = Math.round(hoursWorked * 60)
-    if (workedMins < requiredMinutes) {
-      todayDeduction = Math.round((requiredMinutes - workedMins) * minuteRate)
-    } else if (workedMins > requiredMinutes) {
-      todayAddition = Math.round((workedMins - requiredMinutes) * minuteRate)
-    }
+    const { deduction, addition } = computeRowPay(hoursWorked)
+    todayDeduction = deduction
+    todayAddition = addition
     netEarned = Math.max(0, Math.round(dynamicDailyRate) + todayAddition - todayDeduction)
     todayStatus = attendance.check_out ? 'Completed' : 'Checked In'
   }
@@ -313,12 +320,9 @@ export default function EmployeeDashboard() {
   let totalAdditions = 0
   let totalDeductions = 0
   for (const r of presentMonthRecords) {
-    const mins = r.total_hours ? Math.round(r.total_hours * 60) : 0
-    if (mins < requiredMinutes) {
-      totalDeductions += Math.round((requiredMinutes - mins) * minuteRate)
-    } else if (mins > requiredMinutes) {
-      totalAdditions += Math.round((mins - requiredMinutes) * minuteRate)
-    }
+    const { deduction, addition } = computeRowPay(r.total_hours)
+    totalAdditions += addition
+    totalDeductions += deduction
   }
   const netPayable = attendanceDays === 0
     ? 0

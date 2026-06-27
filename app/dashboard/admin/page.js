@@ -216,26 +216,17 @@ export default function AdminDashboard() {
     return `${h}:${m} ${ampm}`
   }
 
-  const computeDailyDeduction = (totalHours, salary, totalDaysInMonth, requiredHours) => {
-    if (totalHours == null || totalHours <= 0) return 0
+  const computeRowPay = (totalHours, salary, totalDaysInMonth, requiredHours) => {
+    if (totalHours == null || totalHours <= 0) return { deduction: 0, addition: 0 }
     const totalWorkedMinutes = Math.round(totalHours * 60)
     const requiredMinutes = requiredHours * 60
-    if (totalWorkedMinutes >= requiredMinutes) return 0
-    const deficitMinutes = requiredMinutes - totalWorkedMinutes
     const dailyRate = salary / totalDaysInMonth
     const minuteRate = dailyRate / requiredMinutes
-    return Math.round(deficitMinutes * minuteRate)
-  }
-
-  const computeDailyAddition = (totalHours, salary, totalDaysInMonth, requiredHours) => {
-    if (totalHours == null || totalHours <= 0) return 0
-    const totalWorkedMinutes = Math.round(totalHours * 60)
-    const requiredMinutes = requiredHours * 60
-    if (totalWorkedMinutes <= requiredMinutes) return 0
-    const extraMinutes = totalWorkedMinutes - requiredMinutes
-    const dailyRate = salary / totalDaysInMonth
-    const minuteRate = dailyRate / requiredMinutes
-    return Math.round(extraMinutes * minuteRate)
+    const netDiff = totalWorkedMinutes - requiredMinutes
+    return {
+      deduction: netDiff < 0 ? Math.round(Math.abs(netDiff) * minuteRate) : 0,
+      addition: netDiff > 0 ? Math.round(netDiff * minuteRate) : 0,
+    }
   }
 
   const getEmployeePay = (employeeId) => employeeSalaryMap[employeeId] || { monthly_salary: 0, required_hours: 8 }
@@ -274,23 +265,16 @@ export default function AdminDashboard() {
 
     const completedMonth = dedupMonth.filter((a) => a.check_out)
 
-    const overtimeAmtThisMonth = completedMonth.length
-      ? completedMonth.reduce((sum, a) => {
-          const pay = empList.find((e) => e.id === a.employee_id)
-          const sal = pay?.monthly_salary || 0
-          const hrs = pay?.required_hours || 8
-          return sum + computeDailyAddition(a.total_hours, sal, currentMonthDays, hrs)
-        }, 0)
-      : 0
-
-    const penaltiesAmtThisMonth = completedMonth.length
-      ? completedMonth.reduce((sum, a) => {
-          const pay = empList.find((e) => e.id === a.employee_id)
-          const sal = pay?.monthly_salary || 0
-          const hrs = pay?.required_hours || 8
-          return sum + computeDailyDeduction(a.total_hours, sal, currentMonthDays, hrs)
-        }, 0)
-      : 0
+    let overtimeAmtThisMonth = 0
+    let penaltiesAmtThisMonth = 0
+    for (const a of completedMonth) {
+      const pay = empList.find((e) => e.id === a.employee_id)
+      const sal = pay?.monthly_salary || 0
+      const hrs = pay?.required_hours || 8
+      const { deduction, addition } = computeRowPay(a.total_hours, sal, currentMonthDays, hrs)
+      overtimeAmtThisMonth += addition
+      penaltiesAmtThisMonth += deduction
+    }
 
     setStats({ totalEmployees: totalEmployees || 0, presentToday, overtimeThisMonth: overtimeAmtThisMonth, penaltiesThisMonth: penaltiesAmtThisMonth })
     setEmployees(empList)
@@ -691,21 +675,14 @@ export default function AdminDashboard() {
     const monthlySalary = emp.monthly_salary || 0
     const requiredHours = emp.required_hours || 8
     const dynamicDailyRate = monthlySalary / totalDaysInMonth
-    const requiredMinutes = requiredHours * 60
-    const minuteRate = dynamicDailyRate / requiredMinutes
 
     let totalAdditions = 0
     let totalDeductions = 0
 
     for (const r of presentRecords) {
-      const totalMinutes = r.total_hours ? Math.round(r.total_hours * 60) : 0
-      if (totalMinutes < requiredMinutes) {
-        const missingMinutes = requiredMinutes - totalMinutes
-        totalDeductions += Math.round(missingMinutes * minuteRate)
-      } else if (totalMinutes > requiredMinutes) {
-        const extraMinutes = totalMinutes - requiredMinutes
-        totalAdditions += Math.round(extraMinutes * minuteRate)
-      }
+      const { deduction, addition } = computeRowPay(r.total_hours, monthlySalary, totalDaysInMonth, requiredHours)
+      totalAdditions += addition
+      totalDeductions += deduction
     }
 
     const netPayable = attendanceDays === 0
@@ -890,8 +867,7 @@ export default function AdminDashboard() {
                         </div>
                         {orderedAttendance.map((a) => {
                           const pay = getEmployeePay(a.employee_id)
-                          const penAmt = computeDailyDeduction(a.total_hours, pay.monthly_salary, currentMonthDays, pay.required_hours)
-                          const overAmt = computeDailyAddition(a.total_hours, pay.monthly_salary, currentMonthDays, pay.required_hours)
+                          const { deduction: penAmt, addition: overAmt } = computeRowPay(a.total_hours, pay.monthly_salary, currentMonthDays, pay.required_hours)
                           const statusColor =
                             a.status === 'present' ? '#34c759' :
                             a.status === 'late' ? '#cc9a00' :
@@ -1429,7 +1405,7 @@ export default function AdminDashboard() {
                       {records.map((r) => {
                         const pay = getEmployeePay(r.employee_id)
                         const selMonthDays = new Date(viewYear, viewMonth, 0).getDate()
-                        const penAmt = computeDailyDeduction(r.total_hours, pay.monthly_salary, selMonthDays, pay.required_hours)
+                        const { deduction: penAmt } = computeRowPay(r.total_hours, pay.monthly_salary, selMonthDays, pay.required_hours)
                         const sColor =
                           r.status === 'present' ? '#34c759' :
                           r.status === 'late' ? '#cc9a00' :
