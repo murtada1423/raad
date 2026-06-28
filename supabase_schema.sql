@@ -462,3 +462,43 @@ EXCEPTION
         );
 END;
 $$;
+
+-- ============================================================
+-- 5. AUDIT LOG TABLE (tracks all manual attendance changes)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.audit_log (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    record_type TEXT NOT NULL DEFAULT 'attendance',
+    record_id UUID,
+    employee_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    action TEXT NOT NULL CHECK (action IN ('created', 'updated', 'deleted')),
+    old_data JSONB,
+    new_data JSONB,
+    changed_by UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS audit_log_select_admin ON public.audit_log;
+CREATE POLICY audit_log_select_admin
+    ON public.audit_log
+    FOR SELECT
+    USING (auth.uid() IN (
+        SELECT id FROM public.profiles WHERE role = 'admin'
+    ));
+
+DROP POLICY IF EXISTS audit_log_select_own ON public.audit_log;
+CREATE POLICY audit_log_select_own
+    ON public.audit_log
+    FOR SELECT
+    USING (auth.uid() = employee_id);
+
+DROP POLICY IF EXISTS audit_log_insert_admin ON public.audit_log;
+CREATE POLICY audit_log_insert_admin
+    ON public.audit_log
+    FOR INSERT
+    WITH CHECK (auth.uid() IN (
+        SELECT id FROM public.profiles WHERE role = 'admin'
+    ));

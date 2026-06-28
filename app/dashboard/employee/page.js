@@ -58,6 +58,9 @@ export default function EmployeeDashboard() {
   const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1)
   const [viewYear, setViewYear] = useState(new Date().getFullYear())
   const [monthRecords, setMonthRecords] = useState([])
+  // Audit trail
+  const [auditEntries, setAuditEntries] = useState({})
+  const [auditModalRecord, setAuditModalRecord] = useState(null)
 
   const router = useRouter()
   const supabase = createClient()
@@ -114,6 +117,23 @@ export default function EmployeeDashboard() {
       setMonthRecords(hist.data)
       setHistory(deduped)
     }
+
+    // Load audit entries for the employee's records in this month
+    const { data: auditData } = await supabase
+      .from('audit_log')
+      .select('*')
+      .eq('employee_id', userId)
+      .gte('created_at', monthStart)
+      .order('created_at', { ascending: false })
+    const auditMap = {}
+    ;(auditData || []).forEach((entry) => {
+      const rid = entry.record_id
+      if (rid) {
+        if (!auditMap[rid]) auditMap[rid] = []
+        auditMap[rid].push(entry)
+      }
+    })
+    setAuditEntries(auditMap)
   }
 
   const formatHours = (decimalHours) => {
@@ -124,6 +144,16 @@ export default function EmployeeDashboard() {
     if (h === 0) return `${m} دقيقة`
     if (m === 0) return `${h} ساعة`
     return `${h} ساعة و ${m} دقيقة`
+  }
+
+  const formatTime = (d) => {
+    if (!d) return '—'
+    const dt = new Date(d)
+    let h = dt.getHours()
+    const m = String(dt.getMinutes()).padStart(2, '0')
+    const ampm = h < 12 ? 'صباحاً' : 'مساءاً'
+    h = h % 12 || 12
+    return `${h}:${m} ${ampm}`
   }
 
   useEffect(() => {
@@ -503,25 +533,133 @@ export default function EmployeeDashboard() {
                 <span style={styles.th}>خروج</span>
                 <span style={styles.th}>ساعات</span>
                 <span style={styles.th}>الحالة</span>
+                <span style={{ ...styles.th, textAlign: 'center', width: 36 }}></span>
               </div>
-              {history.map((r) => (
-                <div key={r.id} style={styles.tableRow}>
-                  <span style={styles.td}><span dir="ltr">{new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span></span>
-                  <span style={styles.td}><span dir="ltr">{new Date(r.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span></span>
-                  <span style={styles.td}>{r.check_out ? <span dir="ltr">{new Date(r.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span> : '—'}</span>
-                  <span style={styles.td}>{r.total_hours ? formatHours(r.total_hours) : '—'}</span>
-                  <span style={{
-                    ...styles.td, fontWeight: 600,
-                    color: r.status === 'present' ? '#34c759' : r.status === 'late' ? '#b8860b' : '#ff453a',
+              {history.map((r) => {
+                const hasAudit = auditEntries[r.id]?.length > 0
+                return (
+                  <div key={r.id} style={{
+                    ...styles.tableRow,
+                    borderLeft: hasAudit ? '3px solid #ff9f0a' : '3px solid transparent',
                   }}>
-                    {r.status === 'present' ? 'حاضر' : r.status === 'late' ? 'متأخر' : 'مغادرة مبكرة'}
-                  </span>
-                </div>
-              ))}
+                    <span style={styles.td}><span dir="ltr">{new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span></span>
+                    <span style={styles.td}><span dir="ltr">{new Date(r.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span></span>
+                    <span style={styles.td}>{r.check_out ? <span dir="ltr">{new Date(r.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span> : '—'}</span>
+                    <span style={styles.td}>{r.total_hours ? formatHours(r.total_hours) : '—'}</span>
+                    <span style={{
+                      ...styles.td, fontWeight: 600,
+                      color: r.status === 'present' ? '#34c759' : r.status === 'late' ? '#b8860b' : '#ff453a',
+                    }}>
+                      {r.status === 'present' ? 'حاضر' : r.status === 'late' ? 'متأخر' : 'مغادرة مبكرة'}
+                    </span>
+                    <span style={{ textAlign: 'center' }}>
+                      {hasAudit && (
+                        <button style={styles.auditBtn} onClick={() => setAuditModalRecord(r.id)} title="عرض تفاصيل التعديل">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff9f0a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                          </svg>
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
       </div>
+
+      {/* Audit Detail Modal */}
+      {auditModalRecord && (() => {
+        const entries = auditEntries[auditModalRecord] || []
+        if (entries.length === 0) return null
+        const latest = entries[0]
+        const actionLabels = { created: 'إضافة', updated: 'تعديل', deleted: 'حذف' }
+        const actionColors = { created: '#34c759', updated: '#ff9f0a', deleted: '#ff453a' }
+        return (
+          <div style={styles.overlay} onClick={() => setAuditModalRecord(null)}>
+            <div style={{ ...styles.modal, maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+              <button style={styles.modalClose} onClick={() => setAuditModalRecord(null)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+              <h3 style={styles.modalTitle}>تفاصيل التعديل</h3>
+              <p style={styles.modalSub}>
+                {entries.length} {entries.length === 1 ? 'تعديل' : 'تعديلات'} على هذا السجل
+              </p>
+              <div style={{ maxHeight: 350, overflowY: 'auto' }}>
+                {entries.map((entry, idx) => {
+                  const createdAt = new Date(entry.created_at)
+                  const dateStr = createdAt.toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric' })
+                  const timeStr = createdAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
+                  const oldCIn = entry.old_data?.check_in ? formatTime(entry.old_data.check_in) : '—'
+                  const oldCOut = entry.old_data?.check_out ? formatTime(entry.old_data.check_out) : '—'
+                  const newCIn = entry.new_data?.check_in ? formatTime(entry.new_data.check_in) : '—'
+                  const newCOut = entry.new_data?.check_out ? formatTime(entry.new_data.check_out) : '—'
+                  return (
+                    <div key={entry.id || idx} style={{
+                      background: idx % 2 === 0 ? 'rgba(0,0,0,0.02)' : 'transparent',
+                      borderRadius: 10, padding: '12px 0',
+                      borderBottom: '1px solid rgba(0,0,0,0.04)',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <span style={{
+                          display: 'inline-block', padding: '2px 10px', borderRadius: 6,
+                          fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+                          background: `${actionColors[entry.action]}15`,
+                          color: actionColors[entry.action],
+                        }}>
+                          {actionLabels[entry.action] || entry.action}
+                        </span>
+                        <span style={{ fontSize: 11, color: '#aeaeb2' }}>
+                          {dateStr} {timeStr}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#6e6e73', marginBottom: 4 }}>
+                        تم بواسطة: <b style={{ color: '#1d1d1f' }}>{entry.changed_by ? 'المدير' : 'المدير'}</b>
+                      </div>
+                      {entry.action === 'updated' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 6 }}>
+                          <div style={{ background: 'rgba(255,69,58,0.04)', borderRadius: 8, padding: 8 }}>
+                            <div style={{ fontSize: 10, color: '#ff453a', fontWeight: 600, marginBottom: 4 }}>القيم القديمة</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {oldCIn}</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {oldCOut}</div>
+                          </div>
+                          <div style={{ background: 'rgba(52,199,89,0.04)', borderRadius: 8, padding: 8 }}>
+                            <div style={{ fontSize: 10, color: '#34c759', fontWeight: 600, marginBottom: 4 }}>القيم الجديدة</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {newCIn}</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {newCOut}</div>
+                          </div>
+                        </div>
+                      )}
+                      {entry.action === 'created' && (
+                        <div style={{ background: 'rgba(52,199,89,0.04)', borderRadius: 8, padding: 8, marginTop: 6 }}>
+                          <div style={{ fontSize: 10, color: '#34c759', fontWeight: 600, marginBottom: 4 }}>القيم المضافّة</div>
+                          <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {newCIn}</div>
+                          <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {newCOut}</div>
+                        </div>
+                      )}
+                      {entry.action === 'deleted' && (
+                        <div style={{ background: 'rgba(255,69,58,0.04)', borderRadius: 8, padding: 8, marginTop: 6 }}>
+                          <div style={{ fontSize: 10, color: '#ff453a', fontWeight: 600, marginBottom: 4 }}>القيم المحذوفة</div>
+                          <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {oldCIn}</div>
+                          <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {oldCOut}</div>
+                        </div>
+                      )}
+                      {entry.reason && (
+                        <div style={{ marginTop: 6, fontSize: 12, color: '#6e6e73' }}>
+                          السبب: <span style={{ color: '#1d1d1f' }}>{entry.reason}</span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Scanner Modal */}
       {showScanner && (
@@ -712,7 +850,7 @@ const styles = {
   },
   tableHeader: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr',
+    gridTemplateColumns: '1fr 1fr 1fr 0.8fr 1fr 36px',
     gap: 8,
     padding: '10px 0',
     borderBottom: '1px solid rgba(0,0,0,0.06)',
@@ -727,7 +865,7 @@ const styles = {
   },
   tableRow: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr',
+    gridTemplateColumns: '1fr 1fr 1fr 0.8fr 1fr 36px',
     gap: 8,
     padding: '12px 0',
     borderBottom: '1px solid rgba(0,0,0,0.04)',
@@ -819,5 +957,18 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  auditBtn: {
+    width: 28,
+    height: 28,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#ff9f0a',
+    background: 'rgba(255,159,10,0.08)',
+    border: '1px solid rgba(255,159,10,0.15)',
+    borderRadius: 8,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
   },
 }

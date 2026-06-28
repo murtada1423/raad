@@ -174,6 +174,11 @@ export default function AdminDashboard() {
   const [addAttCheckIn, setAddAttCheckIn] = useState('16:00')
   const [addAttCheckOut, setAddAttCheckOut] = useState('00:00')
   const [addAttSaving, setAddAttSaving] = useState(false)
+  // Audit trail
+  const [auditEntries, setAuditEntries] = useState({}) // record_id → array of audit entries
+  const [auditModalRecord, setAuditModalRecord] = useState(null) // shows audit detail modal
+  const [editAttReason, setEditAttReason] = useState('') // reason for edit
+  const [addAttReason, setAddAttReason] = useState('') // reason for add
   const router = useRouter()
   const supabase = createClient()
   const channelRef = useRef(null)
@@ -298,6 +303,22 @@ export default function AdminDashboard() {
     const payMap = {}
     empList.forEach((e) => { payMap[e.id] = { monthly_salary: e.monthly_salary, required_hours: e.required_hours } })
     setEmployeeSalaryMap(payMap)
+
+    // Load audit entries for the current month range
+    const { data: auditData } = await supabase
+      .from('audit_log')
+      .select('*')
+      .gte('created_at', monthStart)
+      .order('created_at', { ascending: false })
+    const auditMap = {}
+    ;(auditData || []).forEach((entry) => {
+      const rid = entry.record_id
+      if (rid) {
+        if (!auditMap[rid]) auditMap[rid] = []
+        auditMap[rid].push(entry)
+      }
+    })
+    setAuditEntries(auditMap)
   }
 
   async function loadOfficeSettings() {
@@ -550,27 +571,48 @@ export default function AdminDashboard() {
     const emp = employees.find((e) => e.id === editAttendance.employee_id)
     if (!emp) { showToast('error', 'بيانات الموظف غير متوفرة'); setAttSaving(false); return }
     if (!editAttCheckIn || !editAttCheckOut) { showToast('error', 'يرجى إدخال وقت الدخول والخروج'); setAttSaving(false); return }
+    const oldData = {
+      check_in: editAttendance.check_in,
+      check_out: editAttendance.check_out,
+      total_hours: editAttendance.total_hours,
+      penalty_minutes: editAttendance.penalty_minutes,
+      overtime_minutes: editAttendance.overtime_minutes,
+      status: editAttendance.status,
+    }
     const computed = computeAttendanceFromTimes(editAttCheckIn, editAttCheckOut, emp)
     if (!computed) { showToast('error', 'بيانات غير صالحة'); setAttSaving(false); return }
     const todayDate = editAttendance.date
     const checkInDt = new Date(`${todayDate}T${editAttCheckIn}:00`).toISOString()
     const checkOutDt = new Date(`${todayDate}T${editAttCheckOut}:00`).toISOString()
+    const { data: { user } } = await supabase.auth.getUser()
+    const newData = {
+      check_in: checkInDt,
+      check_out: checkOutDt,
+      total_hours: computed.total_hours,
+      penalty_minutes: computed.penalty_minutes,
+      overtime_minutes: computed.overtime_minutes,
+      status: computed.status,
+    }
     const { error } = await supabase
       .from('attendance')
-      .update({
-        check_in: checkInDt,
-        check_out: checkOutDt,
-        total_hours: computed.total_hours,
-        penalty_minutes: computed.penalty_minutes,
-        overtime_minutes: computed.overtime_minutes,
-        status: computed.status,
-      })
+      .update(newData)
       .eq('id', editAttendance.id)
     if (error) {
       showToast('error', error.message || 'فشل حفظ التعديل')
     } else {
+      await supabase.from('audit_log').insert({
+        record_type: 'attendance',
+        record_id: editAttendance.id,
+        employee_id: editAttendance.employee_id,
+        action: 'updated',
+        old_data: oldData,
+        new_data: newData,
+        changed_by: user?.id || profile?.id,
+        reason: editAttReason || null,
+      })
       showToast('success', 'تم تعديل الحضور بنجاح')
       setEditAttendance(null)
+      setEditAttReason('')
       await loadData()
     }
     setAttSaving(false)
@@ -579,12 +621,33 @@ export default function AdminDashboard() {
   async function handleDeleteAttendance() {
     if (!confirmDeleteAtt) return
     const id = confirmDeleteAtt.id
+    const empId = confirmDeleteAtt.employee_id
+    const oldRec = { ...confirmDeleteAtt }
     setConfirmDeleteAtt(null)
     setAttSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
     const { error } = await supabase.from('attendance').delete().eq('id', id)
     if (error) {
       showToast('error', error.message || 'فشل حذف السجل')
     } else {
+      await supabase.from('audit_log').insert({
+        record_type: 'attendance',
+        record_id: id,
+        employee_id: empId,
+        action: 'deleted',
+        old_data: {
+          check_in: oldRec.check_in,
+          check_out: oldRec.check_out,
+          total_hours: oldRec.total_hours,
+          penalty_minutes: oldRec.penalty_minutes,
+          overtime_minutes: oldRec.overtime_minutes,
+          status: oldRec.status,
+          date: oldRec.date,
+        },
+        new_data: null,
+        changed_by: user?.id || profile?.id,
+        reason: 'تم الحذف من لوحة المدير',
+      })
       showToast('success', 'تم حذف السجل بنجاح')
       setEditAttendance(null)
       await loadData()
@@ -604,7 +667,8 @@ export default function AdminDashboard() {
     const checkInDt = new Date(`${addAttDate}T${addAttCheckIn}:00`).toISOString()
     const checkOutDt = new Date(`${addAttDate}T${addAttCheckOut}:00`).toISOString()
     setAddAttSaving(true)
-    const { error } = await supabase.from('attendance').insert({
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: newRecord, error } = await supabase.from('attendance').insert({
       employee_id: addAttEmpId,
       date: addAttDate,
       check_in: checkInDt,
@@ -613,16 +677,38 @@ export default function AdminDashboard() {
       penalty_minutes: computed.penalty_minutes,
       overtime_minutes: computed.overtime_minutes,
       status: computed.status,
-    })
+    }).select()
     if (error) {
       showToast('error', error.message || 'فشل إضافة الحضور')
     } else {
+      const inserted = newRecord?.[0]
+      if (inserted) {
+        await supabase.from('audit_log').insert({
+          record_type: 'attendance',
+          record_id: inserted.id,
+          employee_id: addAttEmpId,
+          action: 'created',
+          old_data: null,
+          new_data: {
+            check_in: checkInDt,
+            check_out: checkOutDt,
+            total_hours: computed.total_hours,
+            penalty_minutes: computed.penalty_minutes,
+            overtime_minutes: computed.overtime_minutes,
+            status: computed.status,
+            date: addAttDate,
+          },
+          changed_by: user?.id || profile?.id,
+          reason: addAttReason || null,
+        })
+      }
       showToast('success', 'تم إضافة الحضور بنجاح')
       setShowAddAtt(false)
       setAddAttEmpId('')
       setAddAttDate('')
       setAddAttCheckIn('16:00')
       setAddAttCheckOut('00:00')
+      setAddAttReason('')
       await loadData()
     }
     setAddAttSaving(false)
@@ -634,6 +720,7 @@ export default function AdminDashboard() {
     setEditAttCheckIn(ci ? `${String(ci.getHours()).padStart(2, '0')}:${String(ci.getMinutes()).padStart(2, '0')}` : '')
     setEditAttCheckOut(co ? `${String(co.getHours()).padStart(2, '0')}:${String(co.getMinutes()).padStart(2, '0')}` : '')
     setEditAttendance(record)
+    setEditAttReason('')
   }
 
   async function syncAbsences() {
@@ -888,8 +975,9 @@ export default function AdminDashboard() {
                             a.status === 'late' ? 'rgba(204,154,0,0.1)' :
                             a.status === 'early_checkout' ? 'rgba(255,69,58,0.1)' :
                             'rgba(0,0,0,0.04)'
+                          const hasAudit = auditEntries[a.id]?.length > 0
                           return (
-                            <div key={a.id} style={s.attRow}>
+                            <div key={a.id} style={{ ...s.attRow, borderLeft: hasAudit ? '3px solid #ff9f0a' : '3px solid transparent' }}>
                               <span style={s.tdName}>{profilesMap[a.employee_id] || 'غير معروف'}</span>
                               <span style={s.td}>{formatTime(a.check_in)}</span>
                               <span style={s.td}>{formatTime(a.check_out)}</span>
@@ -905,7 +993,14 @@ export default function AdminDashboard() {
                                   {statusDisplay(a)}
                                 </span>
                               </span>
-                              <span style={{ textAlign: 'center' }}>
+                              <span style={{ textAlign: 'center', display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
+                                {hasAudit && (
+                                  <button style={s.auditBtn} onClick={() => setAuditModalRecord(a.id)} title="عرض تفاصيل التعديل">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ff9f0a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                                    </svg>
+                                  </button>
+                                )}
                                 <button style={s.editIconBtn} onClick={() => openAttendanceEdit(a)} title="تعديل الحضور">
                                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -1236,6 +1331,10 @@ export default function AdminDashboard() {
                 <label style={s.label}>وقت الخروج (check-out)</label>
                 <input type="time" value={editAttCheckOut} onChange={(e) => setEditAttCheckOut(e.target.value)} style={s.input} dir="ltr" />
               </div>
+              <div style={s.inputGroup}>
+                <label style={s.label}>سبب التعديل (اختياري)</label>
+                <input type="text" value={editAttReason} onChange={(e) => setEditAttReason(e.target.value)} style={s.input} placeholder="اذكر سبب التعديل..." />
+              </div>
             </div>
             <div style={s.modalActions}>
               <button style={s.dangerBtn} onClick={() => setConfirmDeleteAtt(editAttendance)} disabled={attSaving}>
@@ -1261,6 +1360,104 @@ export default function AdminDashboard() {
           onCancel={() => { if (!attSaving) setConfirmDeleteAtt(null) }}
         />
       )}
+
+      {/* Audit Detail Modal */}
+      {auditModalRecord && (() => {
+        const entries = auditEntries[auditModalRecord] || []
+        if (entries.length === 0) return null
+        const latest = entries[0]
+        const changedByName = profilesMap[latest.changed_by] || 'المدير'
+        return (
+          <div style={s.overlay} onClick={() => setAuditModalRecord(null)}>
+            <div style={{ ...s.modal, maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+              <button style={s.modalClose} onClick={() => setAuditModalRecord(null)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+              <div style={{ ...s.modalIcon, background: 'linear-gradient(135deg, #ff9f0a, #ff9500)' }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+              </div>
+              <h3 style={s.modalTitle}>تفاصيل التعديل</h3>
+              <p style={s.modalSub}>
+                {entries.length} {entries.length === 1 ? 'تعديل' : 'تعديلات'} على هذا السجل
+              </p>
+              <div style={{ maxHeight: 350, overflowY: 'auto' }}>
+                {entries.map((entry, idx) => {
+                  const actionLabels = { created: 'إضافة', updated: 'تعديل', deleted: 'حذف' }
+                  const actionColors = { created: '#34c759', updated: '#ff9f0a', deleted: '#ff453a' }
+                  const createdAt = new Date(entry.created_at)
+                  const dateStr = createdAt.toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric' })
+                  const timeStr = createdAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
+                  const oldCIn = entry.old_data?.check_in ? formatTime(entry.old_data.check_in) : '—'
+                  const oldCOut = entry.old_data?.check_out ? formatTime(entry.old_data.check_out) : '—'
+                  const newCIn = entry.new_data?.check_in ? formatTime(entry.new_data.check_in) : '—'
+                  const newCOut = entry.new_data?.check_out ? formatTime(entry.new_data.check_out) : '—'
+                  return (
+                    <div key={entry.id || idx} style={{
+                      background: idx % 2 === 0 ? 'rgba(0,0,0,0.02)' : 'transparent',
+                      borderRadius: 10, padding: '12px 0',
+                      borderBottom: '1px solid rgba(0,0,0,0.04)',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <span style={{
+                          display: 'inline-block', padding: '2px 10px', borderRadius: 6,
+                          fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+                          background: `${actionColors[entry.action]}15`,
+                          color: actionColors[entry.action],
+                        }}>
+                          {actionLabels[entry.action] || entry.action}
+                        </span>
+                        <span style={{ fontSize: 11, color: '#aeaeb2' }}>
+                          {dateStr} {timeStr}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#6e6e73', marginBottom: 4 }}>
+                        تم بواسطة: <b style={{ color: '#1d1d1f' }}>{changedByName}</b>
+                      </div>
+                      {entry.action === 'updated' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 6 }}>
+                          <div style={{ background: 'rgba(255,69,58,0.04)', borderRadius: 8, padding: 8 }}>
+                            <div style={{ fontSize: 10, color: '#ff453a', fontWeight: 600, marginBottom: 4 }}>القيم القديمة</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {oldCIn}</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {oldCOut}</div>
+                          </div>
+                          <div style={{ background: 'rgba(52,199,89,0.04)', borderRadius: 8, padding: 8 }}>
+                            <div style={{ fontSize: 10, color: '#34c759', fontWeight: 600, marginBottom: 4 }}>القيم الجديدة</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {newCIn}</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {newCOut}</div>
+                          </div>
+                        </div>
+                      )}
+                      {entry.action === 'created' && (
+                        <div style={{ background: 'rgba(52,199,89,0.04)', borderRadius: 8, padding: 8, marginTop: 6 }}>
+                          <div style={{ fontSize: 10, color: '#34c759', fontWeight: 600, marginBottom: 4 }}>القيم المضافّة</div>
+                          <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {newCIn}</div>
+                          <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {newCOut}</div>
+                        </div>
+                      )}
+                      {entry.action === 'deleted' && (
+                        <div style={{ background: 'rgba(255,69,58,0.04)', borderRadius: 8, padding: 8, marginTop: 6 }}>
+                          <div style={{ fontSize: 10, color: '#ff453a', fontWeight: 600, marginBottom: 4 }}>القيم المحذوفة</div>
+                          <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {oldCIn}</div>
+                          <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {oldCOut}</div>
+                        </div>
+                      )}
+                      {entry.reason && (
+                        <div style={{ marginTop: 6, fontSize: 12, color: '#6e6e73' }}>
+                          السبب: <span style={{ color: '#1d1d1f' }}>{entry.reason}</span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Add Manual Attendance Modal */}
       {showAddAtt && (
@@ -1299,6 +1496,10 @@ export default function AdminDashboard() {
               <div style={s.inputGroup}>
                 <label style={s.label}>وقت الخروج (check-out)</label>
                 <input type="time" value={addAttCheckOut} onChange={(e) => setAddAttCheckOut(e.target.value)} style={s.input} dir="ltr" />
+              </div>
+              <div style={s.inputGroup}>
+                <label style={s.label}>سبب الإضافة (اختياري)</label>
+                <input type="text" value={addAttReason} onChange={(e) => setAddAttReason(e.target.value)} style={s.input} placeholder="اذكر سبب الإضافة..." />
               </div>
             </div>
             <div style={s.modalActions}>
@@ -1411,7 +1612,7 @@ export default function AdminDashboard() {
                     <div style={s.table}>
                       <div style={{
                         display: 'grid',
-                        gridTemplateColumns: '1fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 36px',
+                        gridTemplateColumns: '1fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 72px',
                         gap: 8, padding: '10px 0',
                         borderBottom: '1px solid rgba(0,0,0,0.06)',
                       }}>
@@ -1439,10 +1640,11 @@ export default function AdminDashboard() {
                         return (
                           <div key={r.id} style={{
                             display: 'grid',
-                            gridTemplateColumns: '1fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 36px',
+                            gridTemplateColumns: '1fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 72px',
                             gap: 8, padding: '10px 0',
                             borderBottom: '1px solid rgba(0,0,0,0.04)',
                             alignItems: 'center',
+                            borderLeft: auditEntries[r.id]?.length > 0 ? '3px solid #ff9f0a' : '3px solid transparent',
                           }}>
                             <span style={s.td}>{r.date}</span>
                             <span style={s.td}>{formatTime(r.check_in)}</span>
@@ -1456,7 +1658,14 @@ export default function AdminDashboard() {
                                 {statusDisplay(r)}
                               </span>
                             </span>
-                            <span style={{ textAlign: 'center' }}>
+                            <span style={{ textAlign: 'center', display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
+                              {auditEntries[r.id]?.length > 0 && (
+                                <button style={s.auditBtn} onClick={(e) => { e.stopPropagation(); setAuditModalRecord(r.id) }} title="عرض تفاصيل التعديل">
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ff9f0a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                                  </svg>
+                                </button>
+                              )}
                               <button style={s.editIconBtn} onClick={() => openAttendanceEdit(r)} title="تعديل الحضور">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -1639,7 +1848,7 @@ const s = {
   },
   attHeader: {
     display: 'grid',
-    gridTemplateColumns: '1.5fr 0.9fr 0.9fr 0.7fr 0.7fr 0.7fr 0.9fr 40px',
+    gridTemplateColumns: '1.5fr 0.9fr 0.9fr 0.7fr 0.7fr 0.7fr 0.9fr 80px',
     gap: 10,
     padding: '10px 0',
     borderBottom: '1px solid rgba(0,0,0,0.06)',
@@ -1663,7 +1872,7 @@ const s = {
   },
   attRow: {
     display: 'grid',
-    gridTemplateColumns: '1.5fr 0.9fr 0.9fr 0.7fr 0.7fr 0.7fr 0.9fr 40px',
+    gridTemplateColumns: '1.5fr 0.9fr 0.9fr 0.7fr 0.7fr 0.7fr 0.9fr 80px',
     gap: 10,
     padding: '10px 0',
     borderBottom: '1px solid rgba(0,0,0,0.04)',
@@ -1847,6 +2056,19 @@ const s = {
     color: '#aeaeb2',
     background: 'rgba(0,0,0,0.03)',
     border: 'none',
+    borderRadius: 8,
+    cursor: 'pointer',
+    transition: 'color 0.15s, background 0.15s',
+  },
+  auditBtn: {
+    width: 30,
+    height: 30,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#ff9f0a',
+    background: 'rgba(255,159,10,0.08)',
+    border: '1px solid rgba(255,159,10,0.15)',
     borderRadius: 8,
     cursor: 'pointer',
     transition: 'color 0.15s, background 0.15s',
