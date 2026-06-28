@@ -18,6 +18,7 @@ export default async function Home() {
     .single()
 
   if (!profile) {
+    await supabase.auth.signOut().catch(() => {})
     redirect('/login?error=noprofile')
   }
 
