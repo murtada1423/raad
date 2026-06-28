@@ -12,6 +12,13 @@ export default function LoginPage() {
   const router = useRouter()
   const supabase = createClient()
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('error') === 'noprofile') {
+      setError('الملف الشخصي غير موجود. تواصل مع المدير.')
+    }
+  }, [])
+
   const [payload, setPayload] = useState({ token: '', timestamp: '' })
   const [countdown, setCountdown] = useState(30)
   const canvasRef = useRef(null)

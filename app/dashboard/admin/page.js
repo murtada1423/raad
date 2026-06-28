@@ -366,7 +366,11 @@ export default function AdminDashboard() {
         .eq('id', user.id)
         .single()
 
-      if (error || p?.role !== 'admin') {
+      if (error) {
+        router.push('/login?error=noprofile')
+        return
+      }
+      if (p?.role !== 'admin') {
         router.push('/dashboard/employee')
         return
       }

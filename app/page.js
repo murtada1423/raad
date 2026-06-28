@@ -17,6 +17,10 @@ export default async function Home() {
     .eq('id', user.id)
     .single()
 
+  if (!profile) {
+    redirect('/login?error=noprofile')
+  }
+
   if (profile?.role === 'admin') {
     redirect('/dashboard/admin')
   }
