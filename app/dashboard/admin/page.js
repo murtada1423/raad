@@ -1137,7 +1137,7 @@ export default function AdminDashboard() {
                         const actionLabels = { created: 'إضافة', updated: 'تعديل', deleted: 'حذف' }
                         const actionColors = { created: '#34c759', updated: '#ff9f0a', deleted: '#ff453a' }
                         const dateStr = formatDate(entry.created_at)
-                        const timeStr = new Date(entry.created_at).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
+                        const timeStr = new Date(entry.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
                         const empName = profilesMap[entry.employee_id] || 'غير معروف'
                         return (
                           <div key={entry.id} style={{
@@ -1504,7 +1504,7 @@ export default function AdminDashboard() {
                   const actionLabels = { created: 'إضافة', updated: 'تعديل', deleted: 'حذف' }
                   const actionColors = { created: '#34c759', updated: '#ff9f0a', deleted: '#ff453a' }
                   const dateStr = formatDate(entry.created_at)
-                  const timeStr = new Date(entry.created_at).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
+                  const timeStr = new Date(entry.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
                   const oldCIn = entry.old_data?.check_in ? formatTime(entry.old_data.check_in) : '—'
                   const oldCOut = entry.old_data?.check_out ? formatTime(entry.old_data.check_out) : '—'
                   const newCIn = entry.new_data?.check_in ? formatTime(entry.new_data.check_in) : '—'
