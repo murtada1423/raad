@@ -160,6 +160,15 @@ export default function EmployeeDashboard() {
     return `${h} ساعة و ${m} دقيقة`
   }
 
+  const formatDate = (d) => {
+    if (!d) return '—'
+    const dt = new Date(d)
+    const day = String(dt.getDate()).padStart(2, '0')
+    const month = String(dt.getMonth() + 1).padStart(2, '0')
+    const year = dt.getFullYear()
+    return `${day}-${month}-${year}`
+  }
+
   const formatTime = (d) => {
     if (!d) return '—'
     const dt = new Date(d)
@@ -561,7 +570,7 @@ export default function EmployeeDashboard() {
                     ...styles.tableRow,
                     borderLeft: hasAudit ? '3px solid #ff9f0a' : '3px solid transparent',
                   }}>
-                    <span style={styles.td}><span dir="ltr">{new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span></span>
+                    <span style={styles.td}><span dir="ltr">{formatDate(r.date)}</span></span>
                     <span style={styles.td}><span dir="ltr">{new Date(r.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span></span>
                     <span style={styles.td}>{r.check_out ? <span dir="ltr">{new Date(r.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span> : '—'}</span>
                     <span style={styles.td}>{r.total_hours ? formatHours(r.total_hours) : '—'}</span>
@@ -608,9 +617,8 @@ export default function EmployeeDashboard() {
               {employeeAuditLog.map((entry) => {
                 const actionLabels = { created: 'إضافة', updated: 'تعديل', deleted: 'حذف' }
                 const actionColors = { created: '#34c759', updated: '#ff9f0a', deleted: '#ff453a' }
-                const createdAt = new Date(entry.created_at)
-                const dateStr = createdAt.toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric' })
-                const timeStr = createdAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
+                const dateStr = formatDate(entry.created_at)
+                const timeStr = new Date(entry.created_at).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
                 return (
                   <div key={entry.id} style={{
                     display: 'grid', gridTemplateColumns: '1fr 0.6fr 1fr 1.2fr', gap: 8,
@@ -661,9 +669,8 @@ export default function EmployeeDashboard() {
               </p>
               <div style={{ maxHeight: 350, overflowY: 'auto' }}>
                 {entries.map((entry, idx) => {
-                  const createdAt = new Date(entry.created_at)
-                  const dateStr = createdAt.toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric' })
-                  const timeStr = createdAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
+                  const dateStr = formatDate(entry.created_at)
+                  const timeStr = new Date(entry.created_at).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
                   const oldCIn = entry.old_data?.check_in ? formatTime(entry.old_data.check_in) : '—'
                   const oldCOut = entry.old_data?.check_out ? formatTime(entry.old_data.check_out) : '—'
                   const newCIn = entry.new_data?.check_in ? formatTime(entry.new_data.check_in) : '—'

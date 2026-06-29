@@ -223,6 +223,15 @@ export default function AdminDashboard() {
     return `${h} ساعة و ${m} دقيقة`
   }
 
+  const formatDate = (d) => {
+    if (!d) return '—'
+    const dt = new Date(d)
+    const day = String(dt.getDate()).padStart(2, '0')
+    const month = String(dt.getMonth() + 1).padStart(2, '0')
+    const year = dt.getFullYear()
+    return `${day}-${month}-${year}`
+  }
+
   const formatTime = (d) => {
     if (!d) return '—'
     const dt = new Date(d)
@@ -1127,9 +1136,8 @@ export default function AdminDashboard() {
                       {auditLog.map((entry) => {
                         const actionLabels = { created: 'إضافة', updated: 'تعديل', deleted: 'حذف' }
                         const actionColors = { created: '#34c759', updated: '#ff9f0a', deleted: '#ff453a' }
-                        const createdAt = new Date(entry.created_at)
-                        const dateStr = createdAt.toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric' })
-                        const timeStr = createdAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
+                        const dateStr = formatDate(entry.created_at)
+                        const timeStr = new Date(entry.created_at).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
                         const empName = profilesMap[entry.employee_id] || 'غير معروف'
                         return (
                           <div key={entry.id} style={{
@@ -1428,7 +1436,7 @@ export default function AdminDashboard() {
               </svg>
             </div>
             <h3 style={s.modalTitle}>تعديل الحضور</h3>
-            <p style={s.modalSub}>{profilesMap[editAttendance.employee_id] || 'موظف'} — {editAttendance.date}</p>
+            <p style={s.modalSub}>{profilesMap[editAttendance.employee_id] || 'موظف'} — {formatDate(editAttendance.date)}</p>
             <div style={s.modalForm}>
               <div style={s.inputGroup}>
                 <label style={s.label}>وقت الدخول (check-in)</label>
@@ -1462,7 +1470,7 @@ export default function AdminDashboard() {
       {/* Confirm Delete Attendance */}
       {confirmDeleteAtt && (
         <ConfirmDialog
-          message={`هل أنت متأكد من حذف سجل الحضور لـ ${profilesMap[confirmDeleteAtt.employee_id] || 'الموظف'} بتاريخ ${confirmDeleteAtt.date}؟`}
+          message={`هل أنت متأكد من حذف سجل الحضور لـ ${profilesMap[confirmDeleteAtt.employee_id] || 'الموظف'} بتاريخ ${formatDate(confirmDeleteAtt.date)}؟`}
           onConfirm={handleDeleteAttendance}
           onCancel={() => { if (!attSaving) setConfirmDeleteAtt(null) }}
         />
@@ -1495,9 +1503,8 @@ export default function AdminDashboard() {
                 {entries.map((entry, idx) => {
                   const actionLabels = { created: 'إضافة', updated: 'تعديل', deleted: 'حذف' }
                   const actionColors = { created: '#34c759', updated: '#ff9f0a', deleted: '#ff453a' }
-                  const createdAt = new Date(entry.created_at)
-                  const dateStr = createdAt.toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric' })
-                  const timeStr = createdAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
+                  const dateStr = formatDate(entry.created_at)
+                  const timeStr = new Date(entry.created_at).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
                   const oldCIn = entry.old_data?.check_in ? formatTime(entry.old_data.check_in) : '—'
                   const oldCOut = entry.old_data?.check_out ? formatTime(entry.old_data.check_out) : '—'
                   const newCIn = entry.new_data?.check_in ? formatTime(entry.new_data.check_in) : '—'
@@ -1753,7 +1760,7 @@ export default function AdminDashboard() {
                             alignItems: 'center',
                             borderLeft: auditEntries[r.id]?.length > 0 ? '3px solid #ff9f0a' : '3px solid transparent',
                           }}>
-                            <span style={s.td}>{r.date}</span>
+                            <span style={s.td}>{formatDate(r.date)}</span>
                             <span style={s.td}>{formatTime(r.check_in)}</span>
                             <span style={s.td}>{formatTime(r.check_out)}</span>
                             <span style={s.td}>{formatHours(r.total_hours)}</span>
