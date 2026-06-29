@@ -597,10 +597,10 @@ export default function EmployeeDashboard() {
                   const createdAt = new Date(entry.created_at)
                   const dateStr = createdAt.toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric' })
                   const timeStr = createdAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
-                  const oldCIn = entry.old_data?.check_in ? formatTime(entry.old_data.check_in) : '—'
-                  const oldCOut = entry.old_data?.check_out ? formatTime(entry.old_data.check_out) : '—'
-                  const newCIn = entry.new_data?.check_in ? formatTime(entry.new_data.check_in) : '—'
-                  const newCOut = entry.new_data?.check_out ? formatTime(entry.new_data.check_out) : '—'
+                  const oldCIn = entry.old_data?.check_in || '—'
+                  const oldCOut = entry.old_data?.check_out || '—'
+                  const newCIn = entry.new_data?.check_in || '—'
+                  const newCOut = entry.new_data?.check_out || '—'
                   return (
                     <div key={entry.id || idx} style={{
                       background: idx % 2 === 0 ? 'rgba(0,0,0,0.02)' : 'transparent',
