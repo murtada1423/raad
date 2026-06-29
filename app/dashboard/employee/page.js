@@ -908,7 +908,7 @@ const styles = {
   modalClose: {
     position: 'absolute',
     top: 16,
-    right: 16,
+    left: 16,
     background: 'rgba(0,0,0,0.04)',
     border: 'none',
     borderRadius: 10,
