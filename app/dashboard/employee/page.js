@@ -597,10 +597,10 @@ export default function EmployeeDashboard() {
                   const createdAt = new Date(entry.created_at)
                   const dateStr = createdAt.toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric' })
                   const timeStr = createdAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
-                  const oldCIn = entry.old_data?.check_in || '—'
-                  const oldCOut = entry.old_data?.check_out || '—'
-                  const newCIn = entry.new_data?.check_in || '—'
-                  const newCOut = entry.new_data?.check_out || '—'
+                  const oldCIn = entry.old_data?.check_in ? formatTime(entry.old_data.check_in) : '—'
+                  const oldCOut = entry.old_data?.check_out ? formatTime(entry.old_data.check_out) : '—'
+                  const newCIn = entry.new_data?.check_in ? formatTime(entry.new_data.check_in) : '—'
+                  const newCOut = entry.new_data?.check_out ? formatTime(entry.new_data.check_out) : '—'
                   return (
                     <div key={entry.id || idx} style={{
                       background: idx % 2 === 0 ? 'rgba(0,0,0,0.02)' : 'transparent',
@@ -627,13 +627,13 @@ export default function EmployeeDashboard() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 6 }}>
                           <div style={{ background: 'rgba(255,69,58,0.04)', borderRadius: 8, padding: 8 }}>
                             <div style={{ fontSize: 10, color: '#ff453a', fontWeight: 600, marginBottom: 4 }}>القيم القديمة</div>
-                            <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {oldCIn}</div>
-                            <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {oldCOut}</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {newCIn}</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {newCOut}</div>
                           </div>
                           <div style={{ background: 'rgba(52,199,89,0.04)', borderRadius: 8, padding: 8 }}>
                             <div style={{ fontSize: 10, color: '#34c759', fontWeight: 600, marginBottom: 4 }}>القيم الجديدة</div>
-                            <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {newCIn}</div>
-                            <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {newCOut}</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {oldCIn}</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {oldCOut}</div>
                           </div>
                         </div>
                       )}

@@ -575,11 +575,9 @@ export default function AdminDashboard() {
     const emp = employees.find((e) => e.id === editAttendance.employee_id)
     if (!emp) { showToast('error', 'بيانات الموظف غير متوفرة'); setAttSaving(false); return }
     if (!editAttCheckIn || !editAttCheckOut) { showToast('error', 'يرجى إدخال وقت الدخول والخروج'); setAttSaving(false); return }
-    const oldCheckIn = editAttendance.check_in ? formatTime(editAttendance.check_in) : '—'
-    const oldCheckOut = editAttendance.check_out ? formatTime(editAttendance.check_out) : '—'
     const oldData = {
-      check_in: oldCheckIn,
-      check_out: oldCheckOut,
+      check_in: editAttendance.check_in,
+      check_out: editAttendance.check_out,
       total_hours: editAttendance.total_hours,
       penalty_minutes: editAttendance.penalty_minutes,
       overtime_minutes: editAttendance.overtime_minutes,
@@ -592,8 +590,8 @@ export default function AdminDashboard() {
     const checkOutDt = new Date(`${todayDate}T${editAttCheckOut}:00`).toISOString()
     const { data: { user } } = await supabase.auth.getUser()
     const newData = {
-      check_in: `${editAttCheckIn} ${editAttCheckOut === '00:00' ? '(اليوم التالي)' : ''}`,
-      check_out: editAttCheckOut,
+      check_in: checkInDt,
+      check_out: checkOutDt,
       total_hours: computed.total_hours,
       penalty_minutes: computed.penalty_minutes,
       overtime_minutes: computed.overtime_minutes,
@@ -642,8 +640,8 @@ export default function AdminDashboard() {
         employee_id: empId,
         action: 'deleted',
         old_data: {
-          check_in: oldRec.check_in ? formatTime(oldRec.check_in) : '—',
-          check_out: oldRec.check_out ? formatTime(oldRec.check_out) : '—',
+          check_in: oldRec.check_in,
+          check_out: oldRec.check_out,
           total_hours: oldRec.total_hours,
           penalty_minutes: oldRec.penalty_minutes,
           overtime_minutes: oldRec.overtime_minutes,
@@ -696,8 +694,8 @@ export default function AdminDashboard() {
           action: 'created',
           old_data: null,
           new_data: {
-            check_in: `${addAttCheckIn} ${addAttCheckOut === '00:00' ? '(اليوم التالي)' : ''}`,
-            check_out: addAttCheckOut,
+            check_in: checkInDt,
+            check_out: checkOutDt,
             total_hours: computed.total_hours,
             penalty_minutes: computed.penalty_minutes,
             overtime_minutes: computed.overtime_minutes,
@@ -1397,10 +1395,10 @@ export default function AdminDashboard() {
                   const createdAt = new Date(entry.created_at)
                   const dateStr = createdAt.toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric' })
                   const timeStr = createdAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
-                  const oldCIn = entry.old_data?.check_in || '—'
-                  const oldCOut = entry.old_data?.check_out || '—'
-                  const newCIn = entry.new_data?.check_in || '—'
-                  const newCOut = entry.new_data?.check_out || '—'
+                  const oldCIn = entry.old_data?.check_in ? formatTime(entry.old_data.check_in) : '—'
+                  const oldCOut = entry.old_data?.check_out ? formatTime(entry.old_data.check_out) : '—'
+                  const newCIn = entry.new_data?.check_in ? formatTime(entry.new_data.check_in) : '—'
+                  const newCOut = entry.new_data?.check_out ? formatTime(entry.new_data.check_out) : '—'
                   return (
                     <div key={entry.id || idx} style={{
                       background: idx % 2 === 0 ? 'rgba(0,0,0,0.02)' : 'transparent',
@@ -1427,13 +1425,13 @@ export default function AdminDashboard() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 6 }}>
                           <div style={{ background: 'rgba(255,69,58,0.04)', borderRadius: 8, padding: 8 }}>
                             <div style={{ fontSize: 10, color: '#ff453a', fontWeight: 600, marginBottom: 4 }}>القيم القديمة</div>
-                            <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {oldCIn}</div>
-                            <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {oldCOut}</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {newCIn}</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {newCOut}</div>
                           </div>
                           <div style={{ background: 'rgba(52,199,89,0.04)', borderRadius: 8, padding: 8 }}>
                             <div style={{ fontSize: 10, color: '#34c759', fontWeight: 600, marginBottom: 4 }}>القيم الجديدة</div>
-                            <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {newCIn}</div>
-                            <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {newCOut}</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>دخول: {oldCIn}</div>
+                            <div style={{ fontSize: 12, color: '#6e6e73' }}>خروج: {oldCOut}</div>
                           </div>
                         </div>
                       )}
