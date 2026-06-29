@@ -61,6 +61,8 @@ export default function EmployeeDashboard() {
   // Audit trail
   const [auditEntries, setAuditEntries] = useState({})
   const [auditModalRecord, setAuditModalRecord] = useState(null)
+  const [employeeAuditLog, setEmployeeAuditLog] = useState([])
+  const [auditLogLoading, setAuditLogLoading] = useState(false)
 
   const router = useRouter()
   const supabase = createClient()
@@ -136,6 +138,18 @@ export default function EmployeeDashboard() {
     setAuditEntries(auditMap)
   }
 
+  async function loadEmployeeAuditLog(userId) {
+    setAuditLogLoading(true)
+    const { data } = await supabase
+      .from('audit_log')
+      .select('*')
+      .eq('employee_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(100)
+    setEmployeeAuditLog(data || [])
+    setAuditLogLoading(false)
+  }
+
   const formatHours = (decimalHours) => {
     if (decimalHours == null || isNaN(decimalHours)) return '—'
     const totalMinutes = Math.round(decimalHours * 60)
@@ -180,6 +194,7 @@ export default function EmployeeDashboard() {
       if (!mounted) return
       setProfile(p)
       await loadData(p.id)
+      loadEmployeeAuditLog(p.id)
       setLoading(false)
     }
     init()
@@ -564,6 +579,58 @@ export default function EmployeeDashboard() {
                           </svg>
                         </button>
                       )}
+                    </span>
+                  </div>
+                  )
+                })}
+            </div>
+          )}
+        </div>
+
+        {/* Audit Log Section */}
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>سجل التعديلات على حسابي</h2>
+          {auditLogLoading ? (
+            <div style={styles.emptyState}><p>جاري التحميل...</p></div>
+          ) : employeeAuditLog.length === 0 ? (
+            <div style={styles.emptyState}><p>لا توجد تعديلات على سجلاتك.</p></div>
+          ) : (
+            <div style={styles.table}>
+              <div style={{
+                display: 'grid', gridTemplateColumns: '1fr 0.6fr 1fr 1.2fr', gap: 8,
+                padding: '10px 0', borderBottom: '1px solid rgba(0,0,0,0.06)', marginBottom: 4,
+              }}>
+                <span style={styles.th}>التاريخ</span>
+                <span style={styles.th}>الإجراء</span>
+                <span style={styles.th}>بواسطة</span>
+                <span style={styles.th}>السبب</span>
+              </div>
+              {employeeAuditLog.map((entry) => {
+                const actionLabels = { created: 'إضافة', updated: 'تعديل', deleted: 'حذف' }
+                const actionColors = { created: '#34c759', updated: '#ff9f0a', deleted: '#ff453a' }
+                const createdAt = new Date(entry.created_at)
+                const dateStr = createdAt.toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric' })
+                const timeStr = createdAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
+                return (
+                  <div key={entry.id} style={{
+                    display: 'grid', gridTemplateColumns: '1fr 0.6fr 1fr 1.2fr', gap: 8,
+                    padding: '10px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', alignItems: 'center',
+                    cursor: 'pointer',
+                  }} onClick={() => setAuditModalRecord(entry.record_id)}>
+                    <span style={styles.td}><span dir="ltr" style={{ fontSize: 12 }}>{dateStr} {timeStr}</span></span>
+                    <span>
+                      <span style={{
+                        display: 'inline-block', padding: '2px 8px', borderRadius: 6,
+                        fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+                        background: `${actionColors[entry.action]}15`,
+                        color: actionColors[entry.action],
+                      }}>
+                        {actionLabels[entry.action] || entry.action}
+                      </span>
+                    </span>
+                    <span style={styles.td}>المدير</span>
+                    <span style={{ ...styles.td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {entry.reason || '—'}
                     </span>
                   </div>
                 )
