@@ -1739,20 +1739,53 @@ export default function AdminDashboard() {
                         <span style={s.th}>الحالة</span>
                         <span style={{ ...s.th, textAlign: 'center' }}></span>
                       </div>
-                      {records.map((r) => {
-                        const pay = getEmployeePay(r.employee_id)
-                        const selMonthDays = new Date(viewYear, viewMonth, 0).getDate()
-                        const { deduction: penAmt, addition: overAmt } = computeRowPay(r.total_hours, pay.monthly_salary, selMonthDays, pay.required_hours)
-                        const sColor =
-                          r.status === 'present' ? '#34c759' :
-                          r.status === 'late' ? '#cc9a00' :
-                          r.status === 'early_checkout' ? '#ff453a' : '#aeaeb2'
-                        const bBg =
-                          r.status === 'present' ? 'rgba(52,199,89,0.1)' :
-                          r.status === 'late' ? 'rgba(204,154,0,0.1)' :
-                          r.status === 'early_checkout' ? 'rgba(255,69,58,0.1)' :
-                          'rgba(0,0,0,0.04)'
-                        return (
+                      {(() => {
+                        const recordedDays = new Set(records.map((r) => new Date(r.date).getDate()))
+                        const totalDays = new Date(viewYear, viewMonth, 0).getDate()
+                        const allDays = []
+                        for (let d = 1; d <= totalDays; d++) {
+                          const record = records.find((r) => new Date(r.date).getDate() === d)
+                          if (record) {
+                            allDays.push({ ...record, day: d })
+                          } else {
+                            allDays.push({ day: d, absent: true })
+                          }
+                        }
+                        return allDays.map((row) => {
+                          if (row.absent) {
+                            return (
+                              <div key={`absent-${row.day}`} style={{
+                                display: 'grid',
+                                gridTemplateColumns: '0.6fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 72px',
+                                gap: 8, padding: '10px 0',
+                                borderBottom: '1px solid rgba(0,0,0,0.04)',
+                                alignItems: 'center',
+                              }}>
+                                <span style={s.td} dir="ltr">{String(row.day).padStart(2, '0')}</span>
+                                <span style={s.td}>—</span>
+                                <span style={s.td}>—</span>
+                                <span style={s.td}>—</span>
+                                <span style={s.td}>—</span>
+                                <span style={s.td}>—</span>
+                                <span><span style={{ ...s.badge, background: 'rgba(255,69,58,0.1)', color: '#ff453a' }}>غائب</span></span>
+                                <span></span>
+                              </div>
+                            )
+                          }
+                          const r = row
+                          const pay = getEmployeePay(r.employee_id)
+                          const selMonthDays = totalDays
+                          const { deduction: penAmt, addition: overAmt } = computeRowPay(r.total_hours, pay.monthly_salary, selMonthDays, pay.required_hours)
+                          const sColor =
+                            r.status === 'present' ? '#34c759' :
+                            r.status === 'late' ? '#cc9a00' :
+                            r.status === 'early_checkout' ? '#ff453a' : '#aeaeb2'
+                          const bBg =
+                            r.status === 'present' ? 'rgba(52,199,89,0.1)' :
+                            r.status === 'late' ? 'rgba(204,154,0,0.1)' :
+                            r.status === 'early_checkout' ? 'rgba(255,69,58,0.1)' :
+                            'rgba(0,0,0,0.04)'
+                          return (
                           <div key={r.id} style={{
                             display: 'grid',
                             gridTemplateColumns: '0.6fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 72px',
@@ -1793,7 +1826,8 @@ export default function AdminDashboard() {
                             </span>
                           </div>
                         )
-                      })}
+                      })
+                    })()}
                   </div>
                 </div>
               )}
