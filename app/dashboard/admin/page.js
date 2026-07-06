@@ -1740,10 +1740,13 @@ export default function AdminDashboard() {
                         <span style={{ ...s.th, textAlign: 'center' }}></span>
                       </div>
                       {(() => {
-                        const recordedDays = new Set(records.map((r) => new Date(r.date).getDate()))
-                        const totalDays = new Date(viewYear, viewMonth, 0).getDate()
+                        const todayStr = getEffectiveDate()
+                        const [todayY, todayM, todayD] = todayStr.split('-').map(Number)
+                        const isCurrentMonth = viewYear === todayY && viewMonth === todayM
+                        const maxDay = isCurrentMonth ? Math.min(todayD, new Date(viewYear, viewMonth, 0).getDate()) : new Date(viewYear, viewMonth, 0).getDate()
+                        const totalMonthDays = new Date(viewYear, viewMonth, 0).getDate()
                         const allDays = []
-                        for (let d = 1; d <= totalDays; d++) {
+                        for (let d = 1; d <= maxDay; d++) {
                           const record = records.find((r) => new Date(r.date).getDate() === d)
                           if (record) {
                             allDays.push({ ...record, day: d })
@@ -1752,7 +1755,7 @@ export default function AdminDashboard() {
                           }
                         }
                         return allDays.map((row) => {
-                          if (row.absent) {
+                          if (row.absent && (!isCurrentMonth || row.day < todayD)) {
                             return (
                               <div key={`absent-${row.day}`} style={{
                                 display: 'grid',
@@ -1774,7 +1777,7 @@ export default function AdminDashboard() {
                           }
                           const r = row
                           const pay = getEmployeePay(r.employee_id)
-                          const selMonthDays = totalDays
+                          const selMonthDays = totalMonthDays
                           const { deduction: penAmt, addition: overAmt } = computeRowPay(r.total_hours, pay.monthly_salary, selMonthDays, pay.required_hours)
                           const sColor =
                             r.status === 'present' ? '#34c759' :
