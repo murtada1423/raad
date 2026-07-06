@@ -165,6 +165,7 @@ export default function AdminDashboard() {
   const [viewYear, setViewYear] = useState(new Date().getFullYear())
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentNetPayable, setPaymentNetPayable] = useState(0)
   const [paymentsList, setPaymentsList] = useState([])
   const [savingPayment, setSavingPayment] = useState(false)
   // Manual attendance adjustment
@@ -1693,7 +1694,7 @@ export default function AdminDashboard() {
                     color: '#ffffff', background: 'linear-gradient(135deg, #34c759, #28a745)',
                     border: 'none', borderRadius: 10,
                     cursor: 'pointer', fontFamily: 'inherit',
-                  }} onClick={() => { setPaymentAmount(String(stats.netPayable)); setShowPaymentModal(true) }}>
+                  }} onClick={() => { setPaymentNetPayable(stats.netPayable); setPaymentAmount(String(stats.netPayable)); setShowPaymentModal(true) }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                     </svg>
@@ -1874,7 +1875,8 @@ export default function AdminDashboard() {
 
       {/* Salary Payment Modal */}
       {showPaymentModal && selectedEmployee && (() => {
-        const remaining = stats.netPayable - (parseFloat(paymentAmount) || 0)
+        const payAmt = parseFloat(paymentAmount.replace(/[^\d]/g, '')) || 0
+        const remaining = paymentNetPayable - payAmt
         const monthPayments = paymentsList.filter((p) => p.month === viewMonth && p.year === viewYear)
         return (
           <div style={s.overlay} onClick={() => setShowPaymentModal(false)}>
@@ -1897,7 +1899,7 @@ export default function AdminDashboard() {
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16,
               }}>
                 <span style={{ fontSize: 14, fontWeight: 600, color: '#6e6e73' }}>الراتب المستحق</span>
-                <span style={{ fontSize: 18, fontWeight: 700, color: '#7c3aed' }} dir="ltr">{iqd(stats.netPayable)}</span>
+                <span style={{ fontSize: 18, fontWeight: 700, color: '#7c3aed' }} dir="ltr">{iqd(paymentNetPayable)}</span>
               </div>
 
               {/* Paid Amount Input */}
@@ -1905,13 +1907,20 @@ export default function AdminDashboard() {
                 المبلغ المسلّم
               </label>
               <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                <input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)}
-                  style={{
-                    flex: 1, padding: '10px 14px', fontSize: 16, fontWeight: 600, fontFamily: 'inherit',
-                    border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, outline: 'none',
-                    background: '#ffffff', color: '#1d1d1f', textAlign: 'left', direction: 'ltr',
-                  }} />
-                <button onClick={() => setPaymentAmount(String(stats.netPayable))}
+                <input type="text" inputMode="numeric"
+                value={paymentAmount}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  const normalized = raw.replace(/[٠-٩]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 1632))
+                  const cleaned = normalized.replace(/[^0-9]/g, '')
+                  setPaymentAmount(cleaned)
+                }}
+                style={{
+                  flex: 1, padding: '10px 14px', fontSize: 16, fontWeight: 600, fontFamily: 'inherit',
+                  border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, outline: 'none',
+                  background: '#ffffff', color: '#1d1d1f', textAlign: 'left', direction: 'ltr',
+                }} />
+                <button onClick={() => setPaymentAmount(String(paymentNetPayable))}
                   style={{
                     padding: '10px 14px', fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
                     color: '#7c3aed', background: 'rgba(124,58,237,0.08)',
@@ -1937,15 +1946,15 @@ export default function AdminDashboard() {
 
               {/* Confirm Button */}
               <button onClick={async () => {
-                if (!paymentAmount || parseFloat(paymentAmount) <= 0) { showToast('error', 'الرجاء إدخال مبلغ صحيح'); return }
+                const paid = parseFloat(paymentAmount.replace(/[^\d]/g, '')) || 0
+                if (paid <= 0) { showToast('error', 'الرجاء إدخال مبلغ صحيح'); return }
                 setSavingPayment(true)
-                const paid = parseFloat(paymentAmount)
-                const rem = Math.max(0, stats.netPayable - paid)
+                const rem = Math.max(0, paymentNetPayable - paid)
                 const { error } = await supabase.from('salary_payments').insert({
                   employee_id: selectedEmployee.id,
                   month: viewMonth,
                   year: viewYear,
-                  net_payable: stats.netPayable,
+                  net_payable: paymentNetPayable,
                   paid_amount: paid,
                   remaining: rem,
                   paid_by: profile.id,
