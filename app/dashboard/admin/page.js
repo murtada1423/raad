@@ -163,11 +163,6 @@ export default function AdminDashboard() {
   const [monthAttendanceRecords, setMonthAttendanceRecords] = useState([])
   const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1)
   const [viewYear, setViewYear] = useState(new Date().getFullYear())
-  const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [paymentAmount, setPaymentAmount] = useState('')
-  const [paymentNetPayable, setPaymentNetPayable] = useState(0)
-  const [paymentsList, setPaymentsList] = useState([])
-  const [savingPayment, setSavingPayment] = useState(false)
   // Manual attendance adjustment
   const [editAttendance, setEditAttendance] = useState(null)
   const [editAttCheckIn, setEditAttCheckIn] = useState('')
@@ -446,20 +441,6 @@ export default function AdminDashboard() {
       setViewMonth(now.getMonth() + 1)
       setViewYear(now.getFullYear())
     }
-  }, [selectedEmployee])
-
-  // Load salary payments when employee selected
-  useEffect(() => {
-    if (!selectedEmployee) return
-    ;(async () => {
-      const { data } = await supabase
-        .from('salary_payments')
-        .select('*')
-        .eq('employee_id', selectedEmployee.id)
-        .order('paid_at', { ascending: false })
-        .limit(50)
-      setPaymentsList(data || [])
-    })()
   }, [selectedEmployee])
 
   async function handleEditSave() {
@@ -1687,32 +1668,18 @@ export default function AdminDashboard() {
                     </span>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '8px 16px', fontSize: 13, fontWeight: 600,
-                    color: '#ffffff', background: 'linear-gradient(135deg, #34c759, #28a745)',
-                    border: 'none', borderRadius: 10,
-                    cursor: 'pointer', fontFamily: 'inherit',
-                  }} onClick={() => { setPaymentNetPayable(stats.netPayable); setPaymentAmount(String(stats.netPayable)); setShowPaymentModal(true) }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                    </svg>
-                    تسليم راتب
-                  </button>
-                  <button style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '8px 16px', fontSize: 13, fontWeight: 600,
-                    color: '#6e6e73', background: 'rgba(0,0,0,0.04)',
-                    border: '1px solid rgba(0,0,0,0.06)', borderRadius: 10,
-                    cursor: 'pointer', fontFamily: 'inherit',
-                  }} onClick={() => setSelectedEmployee(null)}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
-                    </svg>
-                    عودة
-                  </button>
-                </div>
+                <button style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '8px 16px', fontSize: 13, fontWeight: 600,
+                  color: '#6e6e73', background: 'rgba(0,0,0,0.04)',
+                  border: '1px solid rgba(0,0,0,0.06)', borderRadius: 10,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }} onClick={() => setSelectedEmployee(null)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+                  </svg>
+                  عودة
+                </button>
               </div>
 
               {/* Month & Year filters */}
@@ -1725,7 +1692,7 @@ export default function AdminDashboard() {
                 </select>
               </div>
 
-              {/* Summary Cards — 4 columns (no net salary) */}
+              {/* Summary Cards — 4 columns */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 28 }}>
                 <div style={s.statCard}>
                   <p style={s.statLabel}>أيام الحضور</p>
@@ -1788,7 +1755,7 @@ export default function AdminDashboard() {
                             allDays.push({ day: d, absent: true })
                           }
                         }
-                        return allDays.map((row) => {
+                        return allDays.reverse().map((row) => {
                           if (row.absent && (!isCurrentMonth || row.day < todayD)) {
                             return (
                               <div key={`absent-${row.day}`} style={{
@@ -1873,143 +1840,6 @@ export default function AdminDashboard() {
         )
       })()}
 
-      {/* Salary Payment Modal */}
-      {showPaymentModal && selectedEmployee && (() => {
-        const payAmt = parseFloat(paymentAmount.replace(/[^\d]/g, '')) || 0
-        const remaining = paymentNetPayable - payAmt
-        const monthPayments = paymentsList.filter((p) => p.month === viewMonth && p.year === viewYear)
-        return (
-          <div style={s.overlay} onClick={() => setShowPaymentModal(false)}>
-            <div style={{ ...s.modal, maxWidth: 500, padding: 28 }} onClick={(e) => e.stopPropagation()}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1d1d1f', margin: 0 }}>
-                  تسليم راتب — {selectedEmployee.full_name}
-                </h3>
-                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#aeaeb2', fontSize: 20, lineHeight: 1 }} onClick={() => setShowPaymentModal(false)}>
-                  &times;
-                </button>
-              </div>
-              <p style={{ fontSize: 13, color: '#6e6e73', margin: '0 0 20px' }}>
-                الشهر: {String(viewMonth).padStart(2, '0')}/{viewYear}
-              </p>
-
-              {/* Net Payable */}
-              <div style={{
-                background: 'rgba(124,58,237,0.06)', borderRadius: 10, padding: '14px 16px',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16,
-              }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#6e6e73' }}>الراتب المستحق</span>
-                <span style={{ fontSize: 18, fontWeight: 700, color: '#7c3aed' }} dir="ltr">{iqd(paymentNetPayable)}</span>
-              </div>
-
-              {/* Paid Amount Input */}
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#1d1d1f', marginBottom: 6 }}>
-                المبلغ المسلّم
-              </label>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                <input type="text" inputMode="numeric"
-                value={paymentAmount}
-                onChange={(e) => {
-                  const raw = e.target.value
-                  const normalized = raw.replace(/[٠-٩]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 1632))
-                  const cleaned = normalized.replace(/[^0-9]/g, '')
-                  setPaymentAmount(cleaned)
-                }}
-                style={{
-                  flex: 1, padding: '10px 14px', fontSize: 16, fontWeight: 600, fontFamily: 'inherit',
-                  border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, outline: 'none',
-                  background: '#ffffff', color: '#1d1d1f', textAlign: 'left', direction: 'ltr',
-                }} />
-                <button onClick={() => setPaymentAmount(String(paymentNetPayable))}
-                  style={{
-                    padding: '10px 14px', fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
-                    color: '#7c3aed', background: 'rgba(124,58,237,0.08)',
-                    border: '1px solid rgba(124,58,237,0.15)', borderRadius: 10, cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}>
-                  الراتب كاملاً
-                </button>
-              </div>
-
-              {/* Remaining */}
-              <div style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '10px 16px', borderRadius: 10,
-                background: remaining > 0 ? 'rgba(255,69,58,0.06)' : 'rgba(52,199,89,0.06)',
-                marginBottom: 20,
-              }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#6e6e73' }}>الباقي</span>
-                <span style={{ fontSize: 16, fontWeight: 700, color: remaining > 0 ? '#ff453a' : '#34c759' }} dir="ltr">
-                  {iqd(Math.max(0, remaining))}
-                </span>
-              </div>
-
-              {/* Confirm Button */}
-              <button onClick={async () => {
-                const paid = parseFloat(paymentAmount.replace(/[^\d]/g, '')) || 0
-                if (paid <= 0) { showToast('error', 'الرجاء إدخال مبلغ صحيح'); return }
-                setSavingPayment(true)
-                const rem = Math.max(0, paymentNetPayable - paid)
-                const { error } = await supabase.from('salary_payments').insert({
-                  employee_id: selectedEmployee.id,
-                  month: viewMonth,
-                  year: viewYear,
-                  net_payable: paymentNetPayable,
-                  paid_amount: paid,
-                  remaining: rem,
-                  paid_by: profile.id,
-                })
-                setSavingPayment(false)
-                if (error) { showToast('error', error.message || 'فشل تسجيل الدفع'); return }
-                showToast('success', 'تم تسليم الراتب بنجاح')
-                setShowPaymentModal(false)
-                setPaymentAmount('')
-                // Reload payments
-                const { data } = await supabase
-                  .from('salary_payments')
-                  .select('*')
-                  .eq('employee_id', selectedEmployee.id)
-                  .order('paid_at', { ascending: false })
-                  .limit(50)
-                setPaymentsList(data || [])
-              }}
-                style={{
-                  width: '100%', padding: '12px', fontSize: 14, fontWeight: 700, fontFamily: 'inherit',
-                  color: '#ffffff', background: remaining <= 0 ? '#aeaeb2' : 'linear-gradient(135deg, #34c759, #28a745)',
-                  border: 'none', borderRadius: 10, cursor: savingPayment ? 'not-allowed' : 'pointer',
-                  opacity: savingPayment ? 0.6 : 1, marginBottom: 24,
-                }}
-                disabled={savingPayment || remaining < 0}>
-                {savingPayment ? 'جاري الحفظ...' : remaining <= 0 ? 'تم تسليم الراتب كاملاً' : 'تأكيد الدفع'}
-              </button>
-
-              {/* Previous Payments */}
-              {monthPayments.length > 0 && (
-                <>
-                  <h4 style={{ fontSize: 14, fontWeight: 600, color: '#1d1d1f', margin: '0 0 10px' }}>
-                    سجل المدفوعات لهذا الشهر
-                  </h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.06)', marginBottom: 4 }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#8e8e93' }}>التاريخ</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#8e8e93' }}>المسلّم</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#8e8e93' }}>الباقي</span>
-                  </div>
-                  {monthPayments.map((p) => (
-                    <div key={p.id} style={{
-                      display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8,
-                      padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.03)',
-                    }}>
-                      <span style={{ fontSize: 12, color: '#6e6e73' }} dir="ltr">{new Date(p.paid_at).toLocaleDateString('en-US')}</span>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: '#34c759' }} dir="ltr">{iqd(p.paid_amount)}</span>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: p.remaining > 0 ? '#ff453a' : '#34c759' }} dir="ltr">{iqd(p.remaining)}</span>
-                    </div>
-                  ))}
-                </>
-              )}
-            </div>
-          </div>
-        )
-      })()}
     </div>
   )
 }
