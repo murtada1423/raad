@@ -58,6 +58,8 @@ export default function EmployeeDashboard() {
   const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1)
   const [viewYear, setViewYear] = useState(new Date().getFullYear())
   const [monthRecords, setMonthRecords] = useState([])
+  // Salary payments
+  const [salaryPayments, setSalaryPayments] = useState([])
   // Audit trail
   const [auditEntries, setAuditEntries] = useState({})
   const [auditModalRecord, setAuditModalRecord] = useState(null)
@@ -136,6 +138,15 @@ export default function EmployeeDashboard() {
       }
     })
     setAuditEntries(auditMap)
+
+    // Load salary payments
+    const { data: payData } = await supabase
+      .from('salary_payments')
+      .select('*')
+      .eq('employee_id', userId)
+      .order('paid_at', { ascending: false })
+      .limit(50)
+    setSalaryPayments(payData || [])
   }
 
   async function loadEmployeeAuditLog(userId) {
@@ -738,6 +749,37 @@ export default function EmployeeDashboard() {
           </div>
         )
       })()}
+
+      {/* Salary Payments Section */}
+      <div style={styles.section}>
+        <h2 style={styles.sectionTitle}>سجل المدفوعات</h2>
+        {salaryPayments.length === 0 ? (
+          <div style={styles.emptyState}><p>لا توجد مدفوعات مسجلة بعد.</p></div>
+        ) : (
+          <div style={styles.table}>
+            <div style={{
+              display: 'grid', gridTemplateColumns: '0.6fr 1fr 1fr 1fr', gap: 8,
+              padding: '10px 0', borderBottom: '1px solid rgba(0,0,0,0.06)', marginBottom: 4,
+            }}>
+              <span style={styles.th}>الشهر</span>
+              <span style={styles.th}>المستحق</span>
+              <span style={styles.th}>المسلّم</span>
+              <span style={styles.th}>الباقي</span>
+            </div>
+            {salaryPayments.map((p) => (
+              <div key={p.id} style={{
+                display: 'grid', gridTemplateColumns: '0.6fr 1fr 1fr 1fr', gap: 8,
+                padding: '10px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', alignItems: 'center',
+              }}>
+                <span style={styles.td} dir="ltr">{String(p.month).padStart(2, '0')}/{p.year}</span>
+                <span style={{ ...styles.td, fontWeight: 600 }} dir="ltr">{iqd(p.net_payable)}</span>
+                <span style={{ ...styles.td, fontWeight: 600, color: '#34c759' }} dir="ltr">{iqd(p.paid_amount)}</span>
+                <span style={{ ...styles.td, fontWeight: 600, color: p.remaining > 0 ? '#ff453a' : '#34c759' }} dir="ltr">{iqd(p.remaining)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Scanner Modal */}
       {showScanner && (
