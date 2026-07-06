@@ -1746,7 +1746,7 @@ export default function AdminDashboard() {
                         const maxDay = isCurrentMonth ? Math.min(todayD, new Date(viewYear, viewMonth, 0).getDate()) : new Date(viewYear, viewMonth, 0).getDate()
                         const totalMonthDays = new Date(viewYear, viewMonth, 0).getDate()
                         const allDays = []
-                        for (let d = 1; d <= maxDay; d++) {
+                        for (let d = maxDay; d >= 1; d--) {
                           const record = records.find((r) => new Date(r.date).getDate() === d)
                           if (record) {
                             allDays.push({ ...record, day: d })
