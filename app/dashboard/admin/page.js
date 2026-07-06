@@ -1726,22 +1726,23 @@ export default function AdminDashboard() {
                     <div style={s.table}>
                       <div style={{
                         display: 'grid',
-                        gridTemplateColumns: '1fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 72px',
+                        gridTemplateColumns: '0.6fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 72px',
                         gap: 8, padding: '10px 0',
                         borderBottom: '1px solid rgba(0,0,0,0.06)',
                       }}>
-                        <span style={s.th}>التاريخ</span>
+                        <span style={s.th}>اليوم</span>
                         <span style={s.th}>دخول</span>
                         <span style={s.th}>خروج</span>
                         <span style={s.th}>ساعات</span>
                         <span style={s.th}>الخصم</span>
+                        <span style={s.th}>الإضافي</span>
                         <span style={s.th}>الحالة</span>
                         <span style={{ ...s.th, textAlign: 'center' }}></span>
                       </div>
                       {records.map((r) => {
                         const pay = getEmployeePay(r.employee_id)
                         const selMonthDays = new Date(viewYear, viewMonth, 0).getDate()
-                        const { deduction: penAmt } = computeRowPay(r.total_hours, pay.monthly_salary, selMonthDays, pay.required_hours)
+                        const { deduction: penAmt, addition: overAmt } = computeRowPay(r.total_hours, pay.monthly_salary, selMonthDays, pay.required_hours)
                         const sColor =
                           r.status === 'present' ? '#34c759' :
                           r.status === 'late' ? '#cc9a00' :
@@ -1754,18 +1755,21 @@ export default function AdminDashboard() {
                         return (
                           <div key={r.id} style={{
                             display: 'grid',
-                            gridTemplateColumns: '1fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 72px',
+                            gridTemplateColumns: '0.6fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 72px',
                             gap: 8, padding: '10px 0',
                             borderBottom: '1px solid rgba(0,0,0,0.04)',
                             alignItems: 'center',
                             borderLeft: auditEntries[r.id]?.length > 0 ? '3px solid #ff9f0a' : '3px solid transparent',
                           }}>
-                            <span style={s.td}>{formatDate(r.date)}</span>
+                            <span style={s.td} dir="ltr">{String(new Date(r.date).getDate()).padStart(2, '0')}</span>
                             <span style={s.td}>{formatTime(r.check_in)}</span>
                             <span style={s.td}>{formatTime(r.check_out)}</span>
                             <span style={s.td}>{formatHours(r.total_hours)}</span>
                             <span style={{ ...s.td, color: penAmt > 0 ? '#ff453a' : '#aeaeb2' }}>
                               {penAmt > 0 ? iqd(penAmt) : '—'}
+                            </span>
+                            <span style={{ ...s.td, color: overAmt > 0 ? '#34c759' : '#aeaeb2' }}>
+                              {overAmt > 0 ? iqd(overAmt) : '—'}
                             </span>
                             <span>
                               <span style={{ ...s.badge, background: bBg, color: sColor }}>
