@@ -1755,7 +1755,7 @@ export default function AdminDashboard() {
                             allDays.push({ day: d, absent: true })
                           }
                         }
-                        return allDays.reverse().map((row) => {
+                        return allDays.map((row) => {
                           if (row.absent && (!isCurrentMonth || row.day < todayD)) {
                             return (
                               <div key={`absent-${row.day}`} style={{
