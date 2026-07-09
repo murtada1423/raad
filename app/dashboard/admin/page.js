@@ -260,7 +260,7 @@ export default function AdminDashboard() {
 
   const statusDisplay = (a) => {
     const statusMap = { present: 'حاضر', late: 'متأخر', early_checkout: 'مغادرة مبكرة', absent: 'غائب' }
-    return a.check_out ? `${statusMap[a.status] || a.status} (تم)` : statusMap[a.status] || a.status
+    return statusMap[a.status] || a.status
   }
 
   async function loadData() {
