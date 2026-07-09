@@ -347,11 +347,7 @@ BEGIN
     IF v_is_new_row THEN
         v_check_in := NOW();
 
-        IF v_check_in::TIME > COALESCE(v_profile.check_in_time::TIME, '09:00:00'::TIME) THEN
-            v_status := 'late';
-        ELSE
-            v_status := 'present';
-        END IF;
+        v_status := 'present';
 
         INSERT INTO public.attendance
             (employee_id, check_in, date, status)

@@ -576,19 +576,7 @@ export default function AdminDashboard() {
     const requiredMinutes = (emp.required_hours || 8) * 60
     const penaltyMinutes = workedMinutes < requiredMinutes ? requiredMinutes - workedMinutes : 0
     const overtimeMinutes = workedMinutes > requiredMinutes ? workedMinutes - requiredMinutes : 0
-    const shiftStart = (emp.check_in_time || '09:00').slice(0, 5)
-    const [ssH, ssM] = shiftStart.split(':').map(Number)
-    const late = ciTotal > (ssH * 60 + ssM)
-    let status
-    if (!checkOutTime) {
-      status = late ? 'late' : 'present'
-    } else if (penaltyMinutes > 0) {
-      status = 'early_checkout'
-    } else if (late) {
-      status = 'late'
-    } else {
-      status = 'present'
-    }
+    const status = totalHours >= (emp.required_hours || 8) ? 'present' : 'early_checkout'
     return { total_hours: totalHours, penalty_minutes: penaltyMinutes, overtime_minutes: overtimeMinutes, status }
   }
 
