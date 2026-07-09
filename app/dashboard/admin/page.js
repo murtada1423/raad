@@ -793,7 +793,7 @@ export default function AdminDashboard() {
 
   const getEmployeeStatsForMonth = (emp, month, year) => {
     const records = getEmployeeMonthRecords(emp.id, month, year)
-    const presentRecords = records.filter((a) => a.status !== 'absent')
+    const presentRecords = records.filter((a) => a.status !== 'absent' && a.check_out !== null)
     const attendanceDays = presentRecords.length
     const totalDaysInMonth = new Date(year, month, 0).getDate()
     const absenceDays = totalDaysInMonth - attendanceDays
@@ -1777,6 +1777,33 @@ export default function AdminDashboard() {
                             )
                           }
                           const r = row
+                          if (!r.check_out) {
+                            return (
+                              <div key={r.id} style={{
+                                display: 'grid',
+                                gridTemplateColumns: '0.6fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 72px',
+                                gap: 8, padding: '10px 0',
+                                borderBottom: '1px solid rgba(0,0,0,0.04)',
+                                alignItems: 'center',
+                              }}>
+                                <span style={s.td} dir="ltr">{String(new Date(r.date).getDate()).padStart(2, '0')}</span>
+                                <span style={s.td}>{formatTime(r.check_in)}</span>
+                                <span style={s.td}>—</span>
+                                <span style={s.td}>—</span>
+                                <span style={s.td}>—</span>
+                                <span style={s.td}>—</span>
+                                <span><span style={{ ...s.badge, background: 'rgba(255,154,0,0.12)', color: '#cc9a00' }}>لم يسجل خروج</span></span>
+                                <span style={{ textAlign: 'center' }}>
+                                  <button style={s.editIconBtn} onClick={() => openAttendanceEdit(r)} title="تعديل الحضور">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                    </svg>
+                                  </button>
+                                </span>
+                              </div>
+                            )
+                          }
                           const pay = getEmployeePay(r.employee_id)
                           const selMonthDays = totalMonthDays
                           const { deduction: penAmt, addition: overAmt } = computeRowPay(r.total_hours, pay.monthly_salary, selMonthDays, pay.required_hours)

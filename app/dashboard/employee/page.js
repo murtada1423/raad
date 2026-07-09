@@ -372,7 +372,7 @@ export default function EmployeeDashboard() {
   const iqd = (value) =>
     new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value) + ' د.ع'
 
-  const presentMonthRecords = monthRecords.filter((r) => r.status !== 'absent')
+  const presentMonthRecords = monthRecords.filter((r) => r.status !== 'absent' && r.check_out !== null)
   const attendanceDays = presentMonthRecords.length
   const absenceDays = totalDaysInMonth - attendanceDays
 
@@ -566,6 +566,7 @@ export default function EmployeeDashboard() {
               </div>
               {history.map((r) => {
                 const hasAudit = auditEntries[r.id]?.length > 0
+                const noCheckOut = !r.check_out
                 return (
                   <div key={r.id} style={{
                     ...styles.tableRow,
@@ -575,12 +576,18 @@ export default function EmployeeDashboard() {
                     <span style={styles.td}><span dir="ltr">{new Date(r.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span></span>
                     <span style={styles.td}>{r.check_out ? <span dir="ltr">{new Date(r.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span> : '—'}</span>
                     <span style={styles.td}>{r.total_hours ? formatHours(r.total_hours) : '—'}</span>
-                    <span style={{
-                      ...styles.td, fontWeight: 600,
-                      color: r.status === 'present' ? '#34c759' : r.status === 'late' ? '#b8860b' : '#ff453a',
-                    }}>
-                      {r.status === 'present' ? 'حاضر' : r.status === 'late' ? 'متأخر' : 'مغادرة مبكرة'}
-                    </span>
+                    {noCheckOut ? (
+                      <span style={{ ...styles.td, fontWeight: 600, color: '#cc9a00' }}>
+                        لم يسجل خروج
+                      </span>
+                    ) : (
+                      <span style={{
+                        ...styles.td, fontWeight: 600,
+                        color: r.status === 'present' ? '#34c759' : r.status === 'late' ? '#b8860b' : '#ff453a',
+                      }}>
+                        {r.status === 'present' ? 'حاضر' : r.status === 'late' ? 'متأخر' : 'مغادرة مبكرة'}
+                      </span>
+                    )}
                     <span style={{ textAlign: 'center' }}>
                       {hasAudit && (
                         <button style={styles.auditBtn} onClick={() => setAuditModalRecord(r.id)} title="عرض تفاصيل التعديل">
