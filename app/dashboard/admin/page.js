@@ -1002,7 +1002,7 @@ export default function AdminDashboard() {
                           const hasAudit = auditEntries[a.id]?.length > 0
                           return (
                             <div key={a.id} style={{ ...s.attRow, borderLeft: hasAudit ? '3px solid #ff9f0a' : '3px solid transparent' }}>
-                              <span style={s.tdName}>{profilesMap[a.employee_id] || 'غير معروف'}</span>
+                              <span style={{ ...s.tdName, cursor: 'pointer' }} onClick={() => { const emp = employees.find((e) => e.id === a.employee_id); if (emp) setSelectedEmployee(emp) }}>{profilesMap[a.employee_id] || 'غير معروف'}</span>
                               <span style={s.td}>{formatTime(a.check_in)}</span>
                               <span style={s.td}>{formatTime(a.check_out)}</span>
                               <span style={s.td}>{a.total_hours ? formatHours(a.total_hours) : '—'}</span>
