@@ -16,9 +16,37 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     required_hours  NUMERIC(4, 1)  NOT NULL DEFAULT 8.0,
     check_in_time   TEXT NOT NULL DEFAULT '16:00',
     check_out_time  TEXT NOT NULL DEFAULT '00:00',
-    advance_amount  NUMERIC(12, 0) NOT NULL DEFAULT 0,
     created_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
+
+-- 1b. EMPLOYEE ADVANCES TABLE (monthly advance tracking)
+CREATE TABLE IF NOT EXISTS public.employee_advances (
+    id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    employee_id  UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    amount       NUMERIC(12, 0) NOT NULL DEFAULT 0,
+    month        INT NOT NULL CHECK (month BETWEEN 1 AND 12),
+    year         INT NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(employee_id, month, year)
+);
+
+ALTER TABLE public.employee_advances ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS employee_advances_select ON public.employee_advances;
+CREATE POLICY employee_advances_select
+    ON public.employee_advances FOR SELECT
+    USING (auth.uid() IN (SELECT id FROM public.profiles WHERE role = 'admin')
+           OR auth.uid() = employee_id);
+
+DROP POLICY IF EXISTS employee_advances_insert ON public.employee_advances;
+CREATE POLICY employee_advances_insert
+    ON public.employee_advances FOR INSERT
+    WITH CHECK (auth.uid() IN (SELECT id FROM public.profiles WHERE role = 'admin'));
+
+DROP POLICY IF EXISTS employee_advances_update ON public.employee_advances;
+CREATE POLICY employee_advances_update
+    ON public.employee_advances FOR UPDATE
+    USING (auth.uid() IN (SELECT id FROM public.profiles WHERE role = 'admin'));
 
 -- 2. ATTENDANCE TABLE
 CREATE TABLE IF NOT EXISTS public.attendance (

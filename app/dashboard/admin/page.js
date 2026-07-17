@@ -130,7 +130,9 @@ export default function AdminDashboard() {
   const [editHours, setEditHours] = useState('')
   const [editCheckIn, setEditCheckIn] = useState('16:00')
   const [editCheckOut, setEditCheckOut] = useState('00:00')
-  const [editAdvance, setEditAdvance] = useState('')
+  const [monthAdvance, setMonthAdvance] = useState(0)
+  const [editingAdvance, setEditingAdvance] = useState(false)
+  const [advanceInput, setAdvanceInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState({ type: '', message: '' })
   const [profilesMap, setProfilesMap] = useState({})
@@ -444,6 +446,23 @@ export default function AdminDashboard() {
     }
   }, [selectedEmployee])
 
+  // Load monthly advance when employee or month/year changes
+  useEffect(() => {
+    if (!selectedEmployee) return
+    supabase
+      .from('employee_advances')
+      .select('amount')
+      .eq('employee_id', selectedEmployee.id)
+      .eq('month', viewMonth)
+      .eq('year', viewYear)
+      .maybeSingle()
+      .then(({ data }) => {
+        setMonthAdvance(data?.amount || 0)
+        setAdvanceInput(String(data?.amount || 0))
+        setEditingAdvance(false)
+      })
+  }, [selectedEmployee, viewMonth, viewYear])
+
   async function handleEditSave() {
     if (!editingEmployee) return
     setSaving(true)
@@ -462,8 +481,6 @@ export default function AdminDashboard() {
       return
     }
 
-    const advance = Math.max(0, parseInt(editAdvance) || 0)
-
     const { error } = await supabase
       .from('profiles')
       .update({
@@ -471,7 +488,6 @@ export default function AdminDashboard() {
         required_hours: hours,
         check_in_time: editCheckIn,
         check_out_time: editCheckOut,
-        advance_amount: advance,
       })
       .eq('id', editingEmployee.id)
 
@@ -482,7 +498,7 @@ export default function AdminDashboard() {
       setEmployees((prev) =>
         prev.map((e) =>
           e.id === editingEmployee.id
-            ? { ...e, monthly_salary: salary, required_hours: hours, check_in_time: editCheckIn, check_out_time: editCheckOut, advance_amount: advance }
+            ? { ...e, monthly_salary: salary, required_hours: hours, check_in_time: editCheckIn, check_out_time: editCheckOut }
             : e
         )
       )
@@ -561,7 +577,6 @@ export default function AdminDashboard() {
     setEditHours(String(employee.required_hours))
     setEditCheckIn(employee.check_in_time || '16:00')
     setEditCheckOut(employee.check_out_time || '00:00')
-    setEditAdvance(String(employee.advance_amount || 0))
   }
 
   function handleSignOut() {
@@ -1263,17 +1278,6 @@ export default function AdminDashboard() {
                 />
               </div>
               <div style={s.inputGroup}>
-                <label style={s.label}>السلفة (د.ع)</label>
-                <input
-                  type="number"
-                  value={editAdvance}
-                  onChange={(e) => setEditAdvance(e.target.value)}
-                  style={s.input}
-                  min="0"
-                  step="1000"
-                />
-              </div>
-              <div style={s.inputGroup}>
                 <label style={s.label}>وقت الدخول الرسمي</label>
                 <input
                   type="time"
@@ -1668,7 +1672,7 @@ export default function AdminDashboard() {
                       <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                     </svg>
                     <span style={{ fontSize: 12, fontWeight: 600, color: '#7c3aed', whiteSpace: 'nowrap' }}>
-                      صافي الراتب: {iqd(Math.max(0, stats.netPayable - (emp.advance_amount || 0)))}
+                      صافي الراتب: {iqd(Math.max(0, stats.netPayable - monthAdvance))}
                     </span>
                   </div>
                 </div>
@@ -1718,17 +1722,52 @@ export default function AdminDashboard() {
 
               {/* Advance & Net */}
               {(() => {
-                const advance = emp.advance_amount || 0
-                const netAfter = Math.max(0, stats.netPayable - advance)
+                const netAfter = Math.max(0, stats.netPayable - monthAdvance)
                 return (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 28 }}>
                     <div style={s.statCard}>
                       <p style={s.statLabel}>الراتب المستحق</p>
                       <p style={{ ...s.statValue, fontSize: 15, color: '#6e6e73' }} dir="ltr">{iqd(stats.netPayable)}</p>
                     </div>
-                    <div style={s.statCard}>
+                    <div style={{ ...s.statCard, position: 'relative' }}>
                       <p style={s.statLabel}>السلفة</p>
-                      <p style={{ ...s.statValue, fontSize: 15, color: advance > 0 ? '#ff453a' : '#aeaeb2' }} dir="ltr">{advance > 0 ? iqd(advance) : '—'}</p>
+                      {editingAdvance ? (
+                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                          <input
+                            type="number"
+                            value={advanceInput}
+                            onChange={(e) => setAdvanceInput(e.target.value)}
+                            style={{ width: '100%', padding: '4px 6px', fontSize: 13, border: '1px solid rgba(0,0,0,0.12)', borderRadius: 6, outline: 'none', fontFamily: 'inherit', textAlign: 'center' }}
+                            min="0"
+                            step="1000"
+                            dir="ltr"
+                          />
+                          <button style={{
+                            padding: '4px 8px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6,
+                            background: '#7c3aed', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                          }} onClick={async () => {
+                            const amt = Math.max(0, parseInt(advanceInput) || 0)
+                            const { error } = await supabase
+                              .from('employee_advances')
+                              .upsert({ employee_id: emp.id, amount: amt, month: viewMonth, year: viewYear }, { onConflict: 'employee_id,month,year' })
+                            if (error) { showToast('error', 'فشل حفظ السلفة'); return }
+                            setMonthAdvance(amt)
+                            setEditingAdvance(false)
+                            showToast('success', 'تم حفظ السلفة')
+                          }}>حفظ</button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <p style={{ ...s.statValue, fontSize: 15, color: monthAdvance > 0 ? '#ff453a' : '#aeaeb2', margin: 0 }} dir="ltr">{monthAdvance > 0 ? iqd(monthAdvance) : '—'}</p>
+                          <button style={{
+                            padding: 0, border: 'none', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#aeaeb2',
+                          }} onClick={() => { setAdvanceInput(String(monthAdvance)); setEditingAdvance(true) }} title="تعديل السلفة">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div style={s.statCard}>
                       <p style={s.statLabel}>صافي الراتب</p>

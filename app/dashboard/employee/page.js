@@ -50,6 +50,7 @@ export default function EmployeeDashboard() {
   const [profile, setProfile] = useState(null)
   const [attendance, setAttendance] = useState(null)
   const [history, setHistory] = useState([])
+  const [monthAdvance, setMonthAdvance] = useState(0)
   const [loading, setLoading] = useState(true)
   const [showScanner, setShowScanner] = useState(false)
   const [scanning, setScanning] = useState(false)
@@ -137,6 +138,15 @@ export default function EmployeeDashboard() {
     })
     setAuditEntries(auditMap)
 
+    // Load monthly advance
+    const { data: advData } = await supabase
+      .from('employee_advances')
+      .select('amount')
+      .eq('employee_id', userId)
+      .eq('month', viewMonth)
+      .eq('year', viewYear)
+      .maybeSingle()
+    setMonthAdvance(advData?.amount || 0)
   }
 
   async function loadEmployeeAuditLog(userId) {
@@ -540,14 +550,14 @@ export default function EmployeeDashboard() {
             </div>
             <div style={styles.payRow}>
               <span style={styles.payLabel}>السلفة</span>
-              <span style={{ ...styles.payValue, color: (profile?.advance_amount || 0) > 0 ? '#ff453a' : '#aeaeb2' }}>
-                {(profile?.advance_amount || 0) > 0 ? iqd(profile.advance_amount) : '—'}
+              <span style={{ ...styles.payValue, color: monthAdvance > 0 ? '#ff453a' : '#aeaeb2' }}>
+                {monthAdvance > 0 ? iqd(monthAdvance) : '—'}
               </span>
             </div>
             <div style={{ ...styles.payRow, borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: 12, marginTop: 4 }}>
               <span style={{ ...styles.payLabel, fontWeight: 700, fontSize: 15, color: '#7c3aed' }}>صافي الراتب للشهر المحدد</span>
               <span style={{ ...styles.payValue, fontWeight: 700, fontSize: 16, color: '#7c3aed' }}>
-                <span dir="ltr">{iqd(Math.max(0, netPayable - (profile?.advance_amount || 0)))}</span>
+                <span dir="ltr">{iqd(Math.max(0, netPayable - monthAdvance))}</span>
               </span>
             </div>
           </div>
