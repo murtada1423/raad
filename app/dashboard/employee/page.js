@@ -538,10 +538,16 @@ export default function EmployeeDashboard() {
               <span style={styles.payLabel}>خصم التأخير</span>
               <span style={{ ...styles.payValue, color: '#ff453a' }}>{iqd(totalDeductions)}</span>
             </div>
+            <div style={styles.payRow}>
+              <span style={styles.payLabel}>السلفة</span>
+              <span style={{ ...styles.payValue, color: (profile?.advance_amount || 0) > 0 ? '#ff453a' : '#aeaeb2' }}>
+                {(profile?.advance_amount || 0) > 0 ? iqd(profile.advance_amount) : '—'}
+              </span>
+            </div>
             <div style={{ ...styles.payRow, borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: 12, marginTop: 4 }}>
-              <span style={{ ...styles.payLabel, fontWeight: 700, fontSize: 15, color: '#7c3aed' }}>الراتب المستحق للشهر المحدد</span>
+              <span style={{ ...styles.payLabel, fontWeight: 700, fontSize: 15, color: '#7c3aed' }}>صافي الراتب للشهر المحدد</span>
               <span style={{ ...styles.payValue, fontWeight: 700, fontSize: 16, color: '#7c3aed' }}>
-                <span dir="ltr">{iqd(netPayable)}</span>
+                <span dir="ltr">{iqd(Math.max(0, netPayable - (profile?.advance_amount || 0)))}</span>
               </span>
             </div>
           </div>

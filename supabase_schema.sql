@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     required_hours  NUMERIC(4, 1)  NOT NULL DEFAULT 8.0,
     check_in_time   TEXT NOT NULL DEFAULT '16:00',
     check_out_time  TEXT NOT NULL DEFAULT '00:00',
+    advance_amount  NUMERIC(12, 0) NOT NULL DEFAULT 0,
     created_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
 

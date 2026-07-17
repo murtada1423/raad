@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS advance_amount NUMERIC(12, 0) NOT NULL DEFAULT 0;

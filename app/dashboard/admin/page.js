@@ -130,6 +130,7 @@ export default function AdminDashboard() {
   const [editHours, setEditHours] = useState('')
   const [editCheckIn, setEditCheckIn] = useState('16:00')
   const [editCheckOut, setEditCheckOut] = useState('00:00')
+  const [editAdvance, setEditAdvance] = useState('')
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState({ type: '', message: '' })
   const [profilesMap, setProfilesMap] = useState({})
@@ -461,6 +462,8 @@ export default function AdminDashboard() {
       return
     }
 
+    const advance = Math.max(0, parseInt(editAdvance) || 0)
+
     const { error } = await supabase
       .from('profiles')
       .update({
@@ -468,6 +471,7 @@ export default function AdminDashboard() {
         required_hours: hours,
         check_in_time: editCheckIn,
         check_out_time: editCheckOut,
+        advance_amount: advance,
       })
       .eq('id', editingEmployee.id)
 
@@ -478,7 +482,7 @@ export default function AdminDashboard() {
       setEmployees((prev) =>
         prev.map((e) =>
           e.id === editingEmployee.id
-            ? { ...e, monthly_salary: salary, required_hours: hours, check_in_time: editCheckIn, check_out_time: editCheckOut }
+            ? { ...e, monthly_salary: salary, required_hours: hours, check_in_time: editCheckIn, check_out_time: editCheckOut, advance_amount: advance }
             : e
         )
       )
@@ -557,6 +561,7 @@ export default function AdminDashboard() {
     setEditHours(String(employee.required_hours))
     setEditCheckIn(employee.check_in_time || '16:00')
     setEditCheckOut(employee.check_out_time || '00:00')
+    setEditAdvance(String(employee.advance_amount || 0))
   }
 
   function handleSignOut() {
@@ -1258,6 +1263,17 @@ export default function AdminDashboard() {
                 />
               </div>
               <div style={s.inputGroup}>
+                <label style={s.label}>السلفة (د.ع)</label>
+                <input
+                  type="number"
+                  value={editAdvance}
+                  onChange={(e) => setEditAdvance(e.target.value)}
+                  style={s.input}
+                  min="0"
+                  step="1000"
+                />
+              </div>
+              <div style={s.inputGroup}>
                 <label style={s.label}>وقت الدخول الرسمي</label>
                 <input
                   type="time"
@@ -1652,7 +1668,7 @@ export default function AdminDashboard() {
                       <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                     </svg>
                     <span style={{ fontSize: 12, fontWeight: 600, color: '#7c3aed', whiteSpace: 'nowrap' }}>
-                      الراتب المستحق للشهر المحدد: {iqd(stats.netPayable)}
+                      صافي الراتب: {iqd(Math.max(0, stats.netPayable - (emp.advance_amount || 0)))}
                     </span>
                   </div>
                 </div>
@@ -1681,7 +1697,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* Summary Cards — 4 columns */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 28 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
                 <div style={s.statCard}>
                   <p style={s.statLabel}>أيام الحضور</p>
                   <p style={{ ...s.statValue, color: '#34c759' }} dir="ltr">{stats.attendanceDays}</p>
@@ -1699,6 +1715,28 @@ export default function AdminDashboard() {
                   <p style={{ ...s.statValue, fontSize: 18 }} dir="ltr">{iqd(stats.dailySalary)}</p>
                 </div>
               </div>
+
+              {/* Advance & Net */}
+              {(() => {
+                const advance = emp.advance_amount || 0
+                const netAfter = Math.max(0, stats.netPayable - advance)
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 28 }}>
+                    <div style={s.statCard}>
+                      <p style={s.statLabel}>الراتب المستحق</p>
+                      <p style={{ ...s.statValue, fontSize: 15, color: '#6e6e73' }} dir="ltr">{iqd(stats.netPayable)}</p>
+                    </div>
+                    <div style={s.statCard}>
+                      <p style={s.statLabel}>السلفة</p>
+                      <p style={{ ...s.statValue, fontSize: 15, color: advance > 0 ? '#ff453a' : '#aeaeb2' }} dir="ltr">{advance > 0 ? iqd(advance) : '—'}</p>
+                    </div>
+                    <div style={s.statCard}>
+                      <p style={s.statLabel}>صافي الراتب</p>
+                      <p style={{ ...s.statValue, fontSize: 16, color: '#7c3aed' }} dir="ltr">{iqd(netAfter)}</p>
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* History Table */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
