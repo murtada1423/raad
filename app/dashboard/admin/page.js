@@ -1724,56 +1724,62 @@ export default function AdminDashboard() {
               {(() => {
                 const netAfter = Math.max(0, stats.netPayable - monthAdvance)
                 return (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 28 }}>
-                    <div style={s.statCard}>
-                      <p style={s.statLabel}>الراتب المستحق</p>
-                      <p style={{ ...s.statValue, fontSize: 15, color: '#6e6e73' }} dir="ltr">{iqd(stats.netPayable)}</p>
-                    </div>
-                    <div style={{ ...s.statCard, position: 'relative' }}>
-                      <p style={s.statLabel}>السلفة</p>
-                      {editingAdvance ? (
-                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                          <input
-                            type="number"
-                            value={advanceInput}
-                            onChange={(e) => setAdvanceInput(e.target.value)}
-                            style={{ width: '100%', padding: '4px 6px', fontSize: 13, border: '1px solid rgba(0,0,0,0.12)', borderRadius: 6, outline: 'none', fontFamily: 'inherit', textAlign: 'center' }}
-                            min="0"
-                            step="1000"
-                            dir="ltr"
-                          />
-                          <button style={{
-                            padding: '4px 8px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6,
-                            background: '#7c3aed', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                          }} onClick={async () => {
-                            const amt = Math.max(0, parseInt(advanceInput) || 0)
-                            const { error } = await supabase
-                              .from('employee_advances')
-                              .upsert({ employee_id: emp.id, amount: amt, month: viewMonth, year: viewYear }, { onConflict: 'employee_id,month,year' })
-                            if (error) { showToast('error', 'فشل حفظ السلفة'); return }
-                            setMonthAdvance(amt)
-                            setEditingAdvance(false)
-                            showToast('success', 'تم حفظ السلفة')
-                          }}>حفظ</button>
-                        </div>
-                      ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: editingAdvance ? 10 : 28 }}>
+                      <div style={s.statCard}>
+                        <p style={s.statLabel}>الراتب المستحق</p>
+                        <p style={{ ...s.statValue, fontSize: 15, color: '#6e6e73' }} dir="ltr">{iqd(stats.netPayable)}</p>
+                      </div>
+                      <div style={s.statCard}>
+                        <p style={s.statLabel}>السلفة</p>
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                           <p style={{ ...s.statValue, fontSize: 15, color: monthAdvance > 0 ? '#ff453a' : '#aeaeb2', margin: 0 }} dir="ltr">{monthAdvance > 0 ? iqd(monthAdvance) : '—'}</p>
                           <button style={{
-                            padding: 0, border: 'none', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#aeaeb2',
+                            padding: 0, border: 'none', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#aeaeb2', flexShrink: 0,
                           }} onClick={() => { setAdvanceInput(String(monthAdvance)); setEditingAdvance(true) }} title="تعديل السلفة">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                             </svg>
                           </button>
                         </div>
-                      )}
+                      </div>
+                      <div style={s.statCard}>
+                        <p style={s.statLabel}>صافي الراتب</p>
+                        <p style={{ ...s.statValue, fontSize: 16, color: '#7c3aed' }} dir="ltr">{iqd(netAfter)}</p>
+                      </div>
                     </div>
-                    <div style={s.statCard}>
-                      <p style={s.statLabel}>صافي الراتب</p>
-                      <p style={{ ...s.statValue, fontSize: 16, color: '#7c3aed' }} dir="ltr">{iqd(netAfter)}</p>
-                    </div>
-                  </div>
+                    {editingAdvance && (
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 28, padding: '12px 16px', background: '#ffffff', borderRadius: 16, border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 1px 4px rgba(0,0,0,0.02)' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#aeaeb2', whiteSpace: 'nowrap' }}>السلفة:</span>
+                        <input
+                          type="number"
+                          value={advanceInput}
+                          onChange={(e) => setAdvanceInput(e.target.value)}
+                          style={{ flex: 1, padding: '8px 12px', fontSize: 15, border: '1px solid rgba(0,0,0,0.12)', borderRadius: 10, outline: 'none', fontFamily: 'inherit', textAlign: 'center', minWidth: 0 }}
+                          min="0"
+                          step="1000"
+                          dir="ltr"
+                        />
+                        <button style={{
+                          padding: '8px 20px', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: 10,
+                          background: '#7c3aed', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                        }} onClick={async () => {
+                          const amt = Math.max(0, parseInt(advanceInput) || 0)
+                          const { error } = await supabase
+                            .from('employee_advances')
+                            .upsert({ employee_id: emp.id, amount: amt, month: viewMonth, year: viewYear }, { onConflict: 'employee_id,month,year' })
+                          if (error) { showToast('error', 'فشل حفظ السلفة'); return }
+                          setMonthAdvance(amt)
+                          setEditingAdvance(false)
+                          showToast('success', 'تم حفظ السلفة')
+                        }}>حفظ</button>
+                        <button style={{
+                          padding: '8px 12px', fontSize: 13, fontWeight: 600, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10,
+                          background: '#fff', color: '#6e6e73', cursor: 'pointer', fontFamily: 'inherit',
+                        }} onClick={() => setEditingAdvance(false)}>إلغاء</button>
+                      </div>
+                    )}
+                  </>
                 )
               })()}
 
