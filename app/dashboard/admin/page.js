@@ -270,7 +270,7 @@ export default function AdminDashboard() {
     const [{ count: totalEmployees }, { data: todayAttendance }, { data: monthAttendance }, { data: employees }, { data: allProfiles }] = await Promise.all([
       supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'employee'),
       supabase.from('attendance').select('*').eq('date', today),
-      supabase.from('attendance').select('*').gte('date', monthStart).lte('date', today),
+      supabase.from('attendance').select('*').gte('date', `${curY}-01-01`).lte('date', today),
       supabase.from('profiles').select('*').eq('role', 'employee').order('full_name'),
       supabase.from('profiles').select('id, full_name'),
     ])
@@ -319,11 +319,11 @@ export default function AdminDashboard() {
     empList.forEach((e) => { payMap[e.id] = { monthly_salary: e.monthly_salary, required_hours: e.required_hours } })
     setEmployeeSalaryMap(payMap)
 
-    // Load audit entries for the current month range (for in-table indicators)
+    // Load audit entries for in-table indicators
     const { data: auditData } = await supabase
       .from('audit_log')
       .select('*')
-      .gte('created_at', monthStart)
+      .gte('created_at', `${curY}-01-01`)
       .order('created_at', { ascending: false })
     const auditMap = {}
     ;(auditData || []).forEach((entry) => {
