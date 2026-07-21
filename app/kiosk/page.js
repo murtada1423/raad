@@ -70,26 +70,26 @@ export default function KioskPage() {
         <h1 style={styles.title}>تسجيل حضور الموظفين</h1>
         <p style={styles.subtitle}>امسح رمز QR أو أدخل الرمز الظاهر باستخدام تطبيق الموظف</p>
 
-        {/* QR Section */}
-        <div style={styles.qrSection}>
+        {/* QR + Code side by side */}
+        <div style={styles.splitSection}>
+          {/* Code Display (left) */}
+          <div style={styles.codeSection}>
+            <span style={styles.codeLabel}>أدخل الرمز</span>
+            <span dir="ltr" style={styles.codeValue}>{code || 'جاري التحميل...'}</span>
+          </div>
+
+          {/* QR Code (right) */}
           <div style={styles.qrFrame}>
             <canvas ref={canvasRef} style={styles.canvas} />
             <div style={styles.qrGlow} />
           </div>
-
-          {/* Code Display */}
-          <div style={styles.codeSection}>
-            <span style={styles.codeLabel}>أو أدخل الرمز</span>
-            <span dir="ltr" style={styles.codeValue}>{code || 'جاري التحميل...'}</span>
-          </div>
         </div>
 
-        {/* Footer Info */}
+        {/* Countdown centered at bottom */}
         <div style={styles.footer}>
-          <div style={styles.footerRow}>
-            <span style={styles.footerLabel}>التحديث</span>
-            <span dir="ltr" style={{ ...styles.footerValue, color: countdown <= 5 ? '#ff453a' : '#1d1d1f', fontWeight: 700, fontSize: 18 }}>{countdown} ث</span>
-          </div>
+          <span style={styles.footerLabel}>تحديث خلال</span>
+          <span dir="ltr" style={{ ...styles.countdownNum, color: countdown <= 5 ? '#ff453a' : '#1d1d1f' }}>{countdown}</span>
+          <span style={styles.footerLabel}>ثانية</span>
         </div>
       </div>
 
@@ -141,52 +141,50 @@ const styles = {
     fontSize: '15px', color: '#6e6e73', maxWidth: '480px',
     lineHeight: '1.6', marginBottom: '36px',
   },
-  qrSection: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px',
-    marginBottom: '36px',
+  splitSection: {
+    display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '48px',
+    marginBottom: '48px', flexWrap: 'wrap', justifyContent: 'center',
   },
   qrFrame: {
-    position: 'relative', padding: '16px', background: '#ffffff',
-    borderRadius: '32px', border: '1px solid rgba(0,0,0,0.06)',
+    position: 'relative', padding: '12px', background: '#ffffff',
+    borderRadius: '28px', border: '1px solid rgba(0,0,0,0.06)',
     boxShadow: '0 32px 80px rgba(0,0,0,0.08)',
   },
   canvas: {
-    display: 'block', width: '420px', height: '420px',
-    maxWidth: '70vw', maxHeight: '70vw', borderRadius: '20px',
+    display: 'block', width: '340px', height: '340px',
+    maxWidth: '60vw', maxHeight: '60vw', borderRadius: '18px',
   },
   qrGlow: {
-    position: 'absolute', inset: '-4px', borderRadius: '36px',
+    position: 'absolute', inset: '-4px', borderRadius: '32px',
     background: 'linear-gradient(135deg, rgba(124,58,237,0.1), rgba(59,130,246,0.1))',
     filter: 'blur(16px)', zIndex: -1,
   },
   codeSection: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-    padding: '20px 48px', background: 'rgba(255,255,255,0.85)',
-    backdropFilter: 'blur(16px)', borderRadius: '16px',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px',
+    padding: '40px 64px', background: 'rgba(255,255,255,0.85)',
+    backdropFilter: 'blur(16px)', borderRadius: '24px',
     border: '1px solid rgba(0,0,0,0.06)',
+    minWidth: '280px',
   },
   codeLabel: {
-    fontSize: '12px', fontWeight: 600, color: '#aeaeb2',
-    letterSpacing: '0.5px',
+    fontSize: '14px', fontWeight: 600, color: '#aeaeb2',
+    letterSpacing: '1px',
   },
   codeValue: {
-    fontSize: 'clamp(36px, 6vw, 56px)', fontWeight: 800,
-    color: '#1d1d1f', letterSpacing: '12px',
+    fontSize: 'clamp(48px, 8vw, 72px)', fontWeight: 800,
+    color: '#1d1d1f', letterSpacing: '16px',
   },
   footer: {
-    display: 'flex', gap: '40px', padding: '16px 32px',
+    display: 'flex', alignItems: 'center', gap: '12px',
+    padding: '14px 32px',
     background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(16px)',
-    borderRadius: '16px', border: '1px solid rgba(0,0,0,0.06)',
-  },
-  footerRow: {
-    display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center',
+    borderRadius: '100px', border: '1px solid rgba(0,0,0,0.06)',
   },
   footerLabel: {
-    fontSize: '10px', fontWeight: 600, color: '#aeaeb2',
-    textTransform: 'uppercase', letterSpacing: '1px',
+    fontSize: '13px', fontWeight: 600, color: '#aeaeb2',
   },
-  footerValue: {
-    fontSize: '13px', fontWeight: 500, color: '#6e6e73',
+  countdownNum: {
+    fontSize: '28px', fontWeight: 800, color: '#1d1d1f',
   },
   watermark: {
     position: 'fixed', bottom: '24px', fontSize: '11px', color: '#aeaeb2', letterSpacing: '1px',
