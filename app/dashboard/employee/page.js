@@ -53,6 +53,8 @@ export default function EmployeeDashboard() {
   const [monthAdvance, setMonthAdvance] = useState(0)
   const [loading, setLoading] = useState(true)
   const [showScanner, setShowScanner] = useState(false)
+  const [showCodeInput, setShowCodeInput] = useState(false)
+  const [codeValue, setCodeValue] = useState('')
   const [scanning, setScanning] = useState(false)
   const [toast, setToast] = useState({ type: '', message: '' })
   const [cameraError, setCameraError] = useState('')
@@ -339,6 +341,69 @@ export default function EmployeeDashboard() {
     )
   }
 
+  async function handleCodeEntry() {
+    const c = codeValue.trim().toUpperCase()
+    if (c.length !== 4) {
+      showToast('error', 'الرمز يجب أن يكون 4 أحرف')
+      return
+    }
+
+    const { data: sessions, error } = await supabase
+      .from('kiosk_sessions')
+      .select('token, created_at')
+      .eq('code', c)
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (error || !sessions || sessions.length === 0) {
+      showToast('error', 'رمز غير صالح أو منتهي الصلاحية')
+      return
+    }
+
+    const session = sessions[0]
+    const now = Date.now()
+    const createdAt = new Date(session.created_at).getTime()
+    if (now - createdAt > 35000) {
+      showToast('error', 'رمز منتهي الصلاحية')
+      return
+    }
+
+    setShowCodeInput(false)
+    setCodeValue('')
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { data, error: rpcErr } = await supabase.rpc('process_attendance_scan', {
+          p_user_id: profile.id,
+          p_lat: position.coords.latitude,
+          p_lng: position.coords.longitude,
+          p_qr_timestamp: session.created_at,
+        })
+
+        if (rpcErr) {
+          showToast('error', rpcErr.message)
+          return
+        }
+
+        if (data?.success) {
+          showToast('success', data.action === 'check_out' ? 'تم تسجيل الخروج — تم تسجيل الحضور!' : 'تم تسجيل الدخول — تم تسجيل الحضور!')
+          await loadData(profile.id)
+        } else {
+          const msg = data?.error === 'Outside geofence — you must be at the office'
+            ? 'خارج نطاق المكتب'
+            : data?.error === 'QR code expired or invalid timestamp'
+              ? 'رمز منتهي الصلاحية'
+              : data?.error || 'فشل التحقق'
+          showToast('error', msg)
+        }
+      },
+      () => {
+        showToast('error', 'الوصول إلى GPS مطلوب لتسجيل الحضور')
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+    )
+  }
+
   function handleSignOut() {
     supabase.auth.signOut()
     router.push('/login')
@@ -418,13 +483,19 @@ export default function EmployeeDashboard() {
             <p style={styles.role}>موظف</p>
           </div>
           <div style={styles.headerActions}>
-            <button style={styles.scanBtn} onClick={() => setShowScanner(true)}>
+            <button style={styles.scanBtn} onClick={() => setShowCodeInput(true)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="4" width="20" height="16" rx="2" /><line x1="6" y1="8" x2="10" y2="8" /><line x1="6" y1="12" x2="14" y2="12" />
+              </svg>
+              إدخال رمز
+            </button>
+            <button style={styles.codeBtn} onClick={() => setShowScanner(true)}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" />
                 <path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" />
                 <line x1="7" y1="12" x2="17" y2="12" />
               </svg>
-              تسجيل الحضور
+              QR
             </button>
             <button style={styles.signOutRed} onClick={handleSignOut}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -765,6 +836,55 @@ export default function EmployeeDashboard() {
 
 
 
+      {/* Code Input Modal */}
+      {showCodeInput && (
+        <div style={styles.overlay} onClick={() => { setShowCodeInput(false); setCodeValue('') }}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <button style={styles.modalClose} onClick={() => { setShowCodeInput(false); setCodeValue('') }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <h3 style={styles.modalTitle}>أدخل الرمز</h3>
+            <p style={styles.modalSub}>أدخل الرمز المكون من 4 أحرف الموجود في شاشة الكشك</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
+              <input
+                type="text"
+                maxLength={4}
+                autoFocus
+                dir="ltr"
+                placeholder="XXXX"
+                value={codeValue}
+                onChange={(e) => setCodeValue(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4))}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCodeEntry() }}
+                style={{
+                  width: '100%', maxWidth: 200, padding: '16px 20px',
+                  fontSize: 32, fontWeight: 800, fontFamily: 'monospace',
+                  textAlign: 'center', letterSpacing: 12,
+                  border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14,
+                  outline: 'none', background: 'rgba(0,0,0,0.02)',
+                  color: '#1d1d1f',
+                }}
+              />
+              <button
+                onClick={handleCodeEntry}
+                disabled={codeValue.length !== 4}
+                style={{
+                  padding: '12px 32px', fontSize: 16, fontWeight: 700,
+                  color: '#fff', background: codeValue.length === 4
+                    ? 'linear-gradient(135deg, #7c3aed, #3b82f6)'
+                    : 'rgba(0,0,0,0.1)',
+                  border: 'none', borderRadius: 12, cursor: codeValue.length === 4 ? 'pointer' : 'default',
+                  fontFamily: 'inherit', boxShadow: codeValue.length === 4 ? '0 4px 16px rgba(124,58,237,0.25)' : 'none',
+                }}
+              >
+                تحقق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Scanner Modal */}
       {showScanner && (
         <div style={styles.overlay} onClick={() => setShowScanner(false)}>
@@ -857,6 +977,20 @@ const styles = {
     cursor: 'pointer',
     fontFamily: 'inherit',
     boxShadow: '0 4px 16px rgba(124,58,237,0.25)',
+  },
+  codeBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '10px 18px',
+    fontSize: 14,
+    fontWeight: 600,
+    color: '#7c3aed',
+    background: 'rgba(124,58,237,0.08)',
+    border: '1px solid rgba(124,58,237,0.2)',
+    borderRadius: 10,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
   },
   signOutRed: {
     display: 'inline-flex',
